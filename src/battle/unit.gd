@@ -17,6 +17,9 @@ var hp: int = 1
 var rage: int = 0
 var av: float = 0.0                     # CTB 行动值（策划文档 6.4），由 TurnOrder 管理
 var buffs: Array[Buff] = []             # Buff/Debuff 统一管理（策划文档 6.7）
+var cooldowns: Dictionary = {}          # skill_id -> 剩余冷却回合（持有者回合开始 -1）
+var extra_action_pending := false       # 击杀刷新等待再动（决策日志 D22）
+var is_elite := false                   # 精英/BOSS 标记（关卡配置投放，bonus_vs_elite 用）
 
 func setup(p_data: UnitData, p_team: Team, p_coords: Vector2i) -> void:
 	data = p_data
@@ -101,16 +104,41 @@ func has_status(status: StringName) -> bool:
 			return true
 	return false
 
-## 持有者回合开始统一 tick：持续效果（DoT）→ 回合数 -1 → 移除过期（策划文档 6.7）
-func tick_turn_start() -> Array:
+## 控制状态行为（决策日志 D22）：stun/paralyze/sleep = 跳过行动；bind = 不可移动、可行动
+func can_act() -> bool:
+	return not (has_status(&"stun") or has_status(&"sleep") or has_status(&"paralyze"))
+
+func can_move() -> bool:
+	return can_act() and not has_status(&"bind")
+
+func skill_cooldown(skill_id: StringName) -> int:
+	return int(cooldowns.get(skill_id, 0))
+
+func set_cooldown(skill: SkillData) -> void:
+	if skill.cooldown > 0:
+		cooldowns[skill.skill_id] = skill.cooldown
+
+## 阶段一：持续效果结算（DoT），回合开始立即执行。
+func tick_effects() -> Array:
 	var events: Array = []
-	var expired: Array[Buff] = []
 	for b in buffs.duplicate():
 		if not b.tick_effect.is_empty():
 			var amount := roundi(float(data.hp) * float(b.tick_effect.get("percent", 0)) / 100.0)
 			if b.tick_effect.get("kind") == "dot" and amount > 0:
 				var applied := take_damage(amount)
 				events.append({"type": "dot", "unit": self, "buff": b.buff_id, "amount": applied})
+	return events
+
+## 阶段二：回合数与技能冷却递减、过期移除。
+## 必须在行动能力（can_act）判定【之后】执行，否则眩晕 1 回合会在判定前先过期（决策日志 D22 注）。
+func tick_durations() -> Array:
+	var events: Array = []
+	for skill_id in cooldowns.keys():
+		cooldowns[skill_id] = int(cooldowns[skill_id]) - 1
+		if int(cooldowns[skill_id]) <= 0:
+			cooldowns.erase(skill_id)
+	var expired: Array[Buff] = []
+	for b in buffs.duplicate():
 		b.duration -= 1
 		if b.is_expired():
 			expired.append(b)
@@ -119,6 +147,12 @@ func tick_turn_start() -> Array:
 		events.append({"type": "buff_expired", "unit": self, "buff": b.buff_id})
 	if not expired.is_empty():
 		buffs_changed.emit(self)
+	return events
+
+## 便捷入口：两阶段一起（测试与工具用；战斗流程由 BattleManager 分阶段调用）。
+func tick_turn_start() -> Array:
+	var events := tick_effects()
+	events.append_array(tick_durations())
 	return events
 
 ## 驱散最多 count 个可驱散的减益，返回被驱散的 buff_id 列表
@@ -143,6 +177,12 @@ func dispel_debuffs(count: int) -> Array:
 func take_damage(amount: int) -> int:
 	var applied := mini(maxi(amount, 0), hp)
 	hp -= applied
+	if applied > 0 and has_status(&"sleep"):
+		# 睡眠受击解除（决策日志 D22）
+		for b in buffs.duplicate():
+			if b.status == &"sleep":
+				buffs.erase(b)
+		buffs_changed.emit(self)
 	if hp == 0:
 		died.emit(self)
 	return applied

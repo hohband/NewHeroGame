@@ -38,6 +38,14 @@ func get_skill(id: StringName) -> SkillData:
 func get_terrain(id: StringName) -> TerrainData:
 	return terrains.get(id) as TerrainData
 
+## 按持有者 + 类型查技能（武将的 act_/ult_ 技能；skill_signature 字段之外的主动技走这里）
+func get_skill_for_unit(unit_id: StringName, type: StringName) -> SkillData:
+	for id in skills:
+		var s: SkillData = skills[id]
+		if s.owner == String(unit_id) and s.type == type:
+			return s
+	return null
+
 # ---------------------------------------------------------------- CSV 解析
 
 ## 读取 CSV 为 [{表头: 值}, ...]；自动跳过 UTF-8 BOM 与尾部空行，列数不符的行告警跳过。

@@ -63,14 +63,25 @@ func advance_turn() -> void:
 	active_unit = turn_order.next_actor(units)
 	if active_unit == null:
 		return
-	# 回合开始统一 tick：Buff/DoT（策划文档 6.7）+ 地形效果（决策日志 D18）
-	var tick := active_unit.tick_turn_start()
+	# 阶段一：DoT/地形效果（策划文档 6.7、决策日志 D18）
+	var tick := active_unit.tick_effects()
 	tick.append_array(_terrain_tick(active_unit))
-	if not tick.is_empty():
-		tick_events.emit(active_unit, tick)
 	if not active_unit.is_alive():
+		if not tick.is_empty():
+			tick_events.emit(active_unit, tick)
 		advance_turn()   # DoT/地形致死，跳过行动
 		return
+	# 行动能力判定（眩晕/麻痹/睡眠），必须在阶段二递减之前（决策日志 D22 注）
+	var incapacitated := not active_unit.can_act()
+	# 阶段二：Buff 回合数与技能冷却递减
+	tick.append_array(active_unit.tick_durations())
+	if incapacitated:
+		tick.append({"type": "turn_skipped", "unit": active_unit})
+		tick_events.emit(active_unit, tick)
+		finish_turn()
+		return
+	if not tick.is_empty():
+		tick_events.emit(active_unit, tick)
 	move_used = false
 	action_used = false
 	change_state(State.AI_TURN if active_unit.team != Unit.Team.PLAYER else State.IDLE)
@@ -95,7 +106,12 @@ func _terrain_tick(unit: Unit) -> Array:
 func finish_turn() -> void:
 	var u := active_unit
 	if u != null:
-		u.reset_av()
+		if u.extra_action_pending:
+			# 再动：行动后 AV 直接清零重置（策划文档 6.4、决策日志 D22）
+			u.extra_action_pending = false
+			u.av = 0.0
+		else:
+			u.reset_av()
 		turn_ended.emit(u)
 	active_unit = null
 	advance_turn()
@@ -143,6 +159,12 @@ func basic_attack_skill(unit: Unit) -> SkillData:
 	if unit.data.range_min >= 2:
 		return data.get_skill(&"generic_ranged")
 	return data.get_skill(&"generic_melee")
+
+# ---------------------------------------------------------------- 技能
+
+## 技能可用性：怒气足够且不在冷却中。
+func can_use_skill(unit: Unit, skill: SkillData) -> bool:
+	return unit.rage >= skill.rage_cost and unit.skill_cooldown(skill.skill_id) <= 0
 
 # ---------------------------------------------------------------- 占位 AI
 

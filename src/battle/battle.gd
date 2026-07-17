@@ -20,6 +20,7 @@ const TERRAIN_COLORS := {
 var grid: Grid
 var manager: BattleManager
 var reachable: Dictionary = {}
+var pending_skill: SkillData = null   # 已选择、等待指向的技能（line 类）
 
 func _ready() -> void:
 	position = ORIGIN
@@ -90,8 +91,39 @@ func _unhandled_input(event: InputEvent) -> void:
 			manager.submit_command(WaitCommand.new(u))   # 待机：防御+20%、怒气+15（表格9）
 			manager.finish_turn()
 		return
+	if event is InputEventKey and event.pressed and (event.keycode == KEY_Q or event.keycode == KEY_W):
+		var u := manager.active_unit
+		if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE and not manager.action_used:
+			_try_skill(u, KEY_W == event.keycode)
+		return
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		pending_skill = null
+		queue_redraw()
+		return
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		pending_skill = null
+		queue_redraw()
+		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		_handle_cell_click(_mouse_cell())
+
+## Q = 主动技，W = 绝技（怒气 100）。需要指向的技能（line）进入待指向状态，其余直接施放。
+func _try_skill(u: Unit, is_ult: bool) -> void:
+	var skill := DataLoader.get_skill_for_unit(u.data.unit_id, &"ult" if is_ult else &"active")
+	if skill == null:
+		print("%s 没有%s" % [u.display_name(), "绝技" if is_ult else "主动技"])
+		return
+	if not manager.can_use_skill(u, skill):
+		print("%s 的 %s 暂不可用（怒气 %d/%d，冷却 %d）" % [
+			u.display_name(), skill.name, u.rage, skill.rage_cost, u.skill_cooldown(skill.skill_id)])
+		return
+	if Targeting.needs_aim(skill):
+		pending_skill = skill
+		queue_redraw()
+		return
+	manager.submit_command(SkillCommand.new(u, skill))
+	manager.action_used = true
+	_after_player_action()
 
 func _handle_cell_click(cell_coords: Vector2i) -> void:
 	var u := manager.active_unit
@@ -100,6 +132,15 @@ func _handle_cell_click(cell_coords: Vector2i) -> void:
 	if not grid.is_inside(cell_coords):
 		return
 	var cell := grid.get_cell(cell_coords)
+	# 待指向技能：点击敌人所在格作为 aim 方向
+	if pending_skill != null:
+		if cell.occupant != null and cell.occupant.team != u.team:
+			var skill := pending_skill
+			pending_skill = null
+			manager.submit_command(SkillCommand.new(u, skill, cell_coords))
+			manager.action_used = true
+			_after_player_action()
+		return
 	# 攻击：点击范围内的敌人
 	if cell.occupant != null and cell.occupant.team == Unit.Team.ENEMY:
 		if not manager.action_used and manager.in_attack_range(u, cell.occupant):
@@ -161,7 +202,14 @@ func _draw_highlights() -> void:
 		draw_rect(Rect2(Vector2(c) * CELL, Vector2(CELL, CELL)), Color(0.3, 0.55, 1.0, 0.30))
 	var u := manager.active_unit
 	if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE:
-		if not manager.action_used:
+		if pending_skill != null:
+			# 待指向技能：亮出技能覆盖格，朱砂圈出可指向的敌人
+			for c in Targeting.cells_in_range(pending_skill, u, grid):
+				draw_rect(Rect2(Vector2(c) * CELL, Vector2(CELL, CELL)), Color(0.62, 0.17, 0.15, 0.25))
+			for e in manager.units:
+				if e.is_alive() and e.team != u.team and Targeting.cells_in_range(pending_skill, u, grid).has(e.coords):
+					draw_arc(Vector2(e.coords) * CELL + Vector2(CELL, CELL) / 2, CELL * 0.42, 0, TAU, 24, Color("C99B3F"), 3.0)
+		elif not manager.action_used:
 			for e in manager.enemies_in_range(u):
 				draw_arc(Vector2(e.coords) * CELL + Vector2(CELL, CELL) / 2, CELL * 0.42, 0, TAU, 24, Color("9E2B25"), 3.0)
 

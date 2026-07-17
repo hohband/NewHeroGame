@@ -71,7 +71,7 @@ func test_execute_kill_grants_bonus_rage() -> void:
 func test_unimplemented_effect_does_not_crash() -> void:
 	var skill := SkillData.new()
 	skill.skill_id = &"test_unknown"
-	skill.effects = "stun(1)"
+	skill.effects = "counter(1)"   # 反击状态尚未注册
 	var events := EffectSystem.execute(skill, EffectContext.new())
 	assert_eq(events.size(), 0, "未实现效果：报错跳过，不崩溃、不产生事件")
 	assert_push_error("未实现的原子效果")
