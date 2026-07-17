@@ -140,7 +140,8 @@ func can_deploy_at(coords: Vector2i) -> bool:
 	return cell != null and not cell.is_blocked() and cell.occupant == null
 
 ## 布阵：上阵/调整位置。名额与必出校验在 confirm_deploy。
-func deploy_unit(unit_id: StringName, coords: Vector2i) -> Unit:
+## 传入 hero 时按养成进度生成战斗数值（Progression.compute_unit_data）。
+func deploy_unit(unit_id: StringName, coords: Vector2i, hero: Hero = null) -> Unit:
 	if state != State.DEPLOY:
 		push_error("布阵：当前不在布阵阶段")
 		return null
@@ -150,14 +151,27 @@ func deploy_unit(unit_id: StringName, coords: Vector2i) -> Unit:
 	if deployed.size() >= level.max_deploy:
 		push_error("布阵：上阵人数已达上限 %d" % level.max_deploy)
 		return null
+	var ud := data.get_unit(unit_id)
+	if hero != null:
+		ud = Progression.compute_unit_data(hero, ud, data.progression)
 	var u := Unit.new()
-	u.setup(data.get_unit(unit_id), Unit.Team.PLAYER, coords)
+	u.setup(ud, Unit.Team.PLAYER, coords)
+	u.hero = hero
 	u.facing = Vector2i(0, -1)
 	deployed.append(u)
 	add_unit(u)
 	grid.place_unit(u, coords)
 	deploy_changed.emit()
 	return u
+
+## 把档案中的养成进度应用到必出武将的自动落位上（场景在 setup_level 后调用）
+func apply_profile_to_deployed(profile: PlayerProfile) -> void:
+	for u in deployed:
+		var h := profile.get_hero(u.data.unit_id)
+		if h != null:
+			u.hero = h
+			u.data = Progression.compute_unit_data(h, data.get_unit(u.data.unit_id), data.progression)
+			u.hp = u.data.hp
 
 ## 撤下一名已上阵单位（必出武将不可撤，只可调整位置——调用方负责先 deploy 新位置）
 func undeploy_unit(u: Unit) -> void:

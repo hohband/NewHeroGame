@@ -13,18 +13,23 @@ config_version=5
 config/name="水浒战棋"
 config/description="替天行道 · 聚义梁山 —— 战棋（SRPG）＋ 卡牌养成"
 config/features=PackedStringArray("4.7")
-run/main_scene="res://scenes/battle/battle.tscn"
+run/main_scene="res://scenes/hub/hub.tscn"
 
 [autoload]
 
 DataLoader="*res://src/autoload/data_loader.gd"
 SaveSystem="*res://src/autoload/save_system.gd"
+GameState="*res://src/autoload/game_state.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
+
+[gui]
+
+theme/custom="res://assets/theme.tres"
 
 [rendering]
 

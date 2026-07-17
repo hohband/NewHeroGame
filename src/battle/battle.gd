@@ -6,7 +6,6 @@ extends Node2D
 
 const CELL := 64
 const ORIGIN := Vector2(320, 40)
-const LEVEL_ID := "ch03_01"
 
 const TERRAIN_COLORS := {
 	&"plain": Color("8FBC4F"),
@@ -31,15 +30,20 @@ var grid: Grid
 var manager: BattleManager
 var reachable: Dictionary = {}
 var pending_skill: SkillData = null   # 已选择、等待指向的技能（line 类）
-var selected_roster := -1             # 布阵：选中的候选序号（level.roster 下标）
+var selected_roster := -1             # 布阵：选中的候选序号（roster_ids 下标）
+var roster_ids: Array[StringName] = []  # 候选池（按档案拥有情况过滤后）
+var _result_shown := false
 
 func _ready() -> void:
 	position = ORIGIN
-	var level := LevelRegistry.get_level(LEVEL_ID)
+	var level := LevelRegistry.get_level(GameState.current_level_id)
 	manager = BattleManager.new()
 	add_child(manager)
 	manager.setup_level(DataLoader, level)
+	if SaveSystem.profile != null:
+		manager.apply_profile_to_deployed(SaveSystem.profile)
 	grid = manager.grid
+	roster_ids = level.roster.filter(func(id): return SaveSystem.profile == null or SaveSystem.profile.has_hero(id))
 	manager.turn_started.connect(_on_turn_started)
 	manager.command_executed.connect(func(_cmd, _events): queue_redraw())
 	manager.unit_died.connect(func(_u): queue_redraw())
@@ -83,11 +87,13 @@ func _handle_deploy_input(event: InputEvent) -> void:
 			manager.undeploy_unit(cell.occupant)   # 点已上阵单位：撤下
 			return
 		if selected_roster != -1:
-			manager.deploy_unit(manager.level.roster[selected_roster], cell_coords)
+			var id: StringName = roster_ids[selected_roster]
+			var hero := SaveSystem.profile.get_hero(id) if SaveSystem.profile != null else null
+			manager.deploy_unit(id, cell_coords, hero)
 			selected_roster = -1
 
 func _roster_index_at(pos: Vector2) -> int:
-	for i in manager.level.roster.size():
+	for i in roster_ids.size():
 		var center := Vector2(-360.0, 24.0 + i * 44.0)
 		if pos.distance_to(center) <= 18.0:
 			return i
@@ -232,8 +238,83 @@ func _on_turn_started(unit: Unit) -> void:
 
 func _on_battle_ended(winner: int) -> void:
 	reachable.clear()
-	print("战斗结束，胜方：%s（第 %d 回合）" % [("我方" if winner == Unit.Team.PLAYER else "敌方"), manager.round_count])
+	if _result_shown:
+		return
+	_result_shown = true
+	var result := manager.compute_result(winner)
+	if SaveSystem.profile != null:
+		GameState.last_result = Flow.apply_battle_result(SaveSystem.profile, manager.level, result, manager.deployed, DataLoader)
+		SaveSystem.save_game()
+	else:
+		GameState.last_result = result
+	_show_result_panel(GameState.last_result)
 	queue_redraw()
+
+## 结算面板：胜负、奖励、经验/升级、成就、新武将，返回山寨
+func _show_result_panel(summary: Dictionary) -> void:
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	var panel := PanelContainer.new()
+	panel.position = Vector2(430, 150)
+	panel.custom_minimum_size = Vector2(420, 0)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	panel.add_child(vbox)
+	var title := Label.new()
+	title.text = "—— 胜 利 ——" if summary.get("won", false) else "—— 战 败 ——"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+	if summary.get("won", false):
+		var lines: Array[String] = []
+		var rewards: Dictionary = summary.get("rewards", {})
+		if not rewards.is_empty():
+			var parts: Array[String] = []
+			for k in rewards:
+				parts.append("%s ×%d" % [_reward_name(k), int(rewards[k])])
+			lines.append(("【首通奖励】" if summary.get("first_clear", false) else "【通关奖励】") + "、".join(parts))
+		if int(summary.get("exp_each", 0)) > 0:
+			lines.append("上阵武将经验 +%d" % int(summary["exp_each"]))
+		for id in summary.get("level_ups", {}):
+			lines.append("  %s 升 %d 级！" % [DataLoader.get_unit(id).name, int(summary["level_ups"][id])])
+		for ach in summary.get("achievements", []):
+			lines.append("成就达成：%s" % _achievement_name(ach))
+		for id in summary.get("unlocked", []):
+			lines.append("新武将加入：%s！" % DataLoader.get_unit(id).name)
+		if summary.get("chapter_now", 0) > manager.level.chapter:
+			lines.append("—— 第 %d 章开启 ——" % int(summary["chapter_now"]))
+		for text in lines:
+			var l := Label.new()
+			l.text = text
+			vbox.add_child(l)
+	else:
+		var hint := Label.new()
+		hint.text = "整顿兵马，再接再厉。"
+		vbox.add_child(hint)
+	var btn := Button.new()
+	btn.text = "返回山寨"
+	btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/hub/hub.tscn"))
+	vbox.add_child(btn)
+	layer.add_child(panel)
+
+func _reward_name(key: Variant) -> String:
+	match String(key):
+		"gold":
+			return "金币"
+		"shard":
+			return "通用碎片"
+		"skill_book":
+			return "技能书"
+		"breakthrough_mat":
+			return "突破材料"
+		"shard_bai_sheng":
+			return "白胜碎片"
+	return String(key)
+
+func _achievement_name(id: Variant) -> String:
+	for ach in manager.level.achievements:
+		if ach.get("id") == id:
+			return String(ach.get("name", id))
+	return String(id)
 
 func _mouse_cell() -> Vector2i:
 	return _pos_to_cell(get_local_mouse_position())
@@ -284,13 +365,19 @@ func _draw_deploy() -> void:
 			var rect := Rect2(Vector2(Vector2i(x, y)) * CELL, Vector2(CELL, CELL))
 			draw_rect(rect, Color(0.3, 0.55, 1.0, 0.18))
 			draw_rect(rect, Color(0.3, 0.55, 1.0, 0.5), false, 1.0)
-	# 候选条（稀有度配色；选中的加白圈）
-	for i in manager.level.roster.size():
-		var id: StringName = manager.level.roster[i]
+	# 候选条（稀有度配色 + 姓名；选中的加白圈）
+	var font := ThemeDB.fallback_font
+	for i in roster_ids.size():
+		var id: StringName = roster_ids[i]
 		var center := Vector2(-360.0, 24.0 + i * 44.0)
 		var ud := DataLoader.get_unit(id)
 		draw_circle(center, 16.0, QUALITY_COLORS.get(ud.quality, Color.GRAY))
 		draw_arc(center, 16.0, 0, TAU, 20, Color("263238"), 1.5)
+		var label := ud.name
+		if SaveSystem.profile != null and SaveSystem.profile.has_hero(id):
+			var h := SaveSystem.profile.get_hero(id)
+			label = "%s Lv.%d" % [ud.name, h.level]
+		draw_string(font, center + Vector2(24, 6), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("263238"))
 		if i == selected_roster:
 			draw_arc(center, 20.0, 0, TAU, 20, Color.WHITE, 2.5)
 

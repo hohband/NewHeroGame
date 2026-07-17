@@ -2,14 +2,201 @@ class_name LevelRegistry
 extends RefCounted
 ## 关卡注册表：以代码构建 LevelConfig（.tres 可视化编辑工作流在 M2 接入，决策日志 D28）。
 
+## 全部关卡 id（章节顺序，关卡选择界面与章节终关判定用）
+static func list_ids() -> Array[String]:
+	return ["ch01_01", "ch01_02", "ch01_03", "ch01_04", "ch01_05",
+		"ch02_01", "ch02_02", "ch03_01", "debug_01"]
+
 static func get_level(id: String) -> LevelConfig:
 	match id:
 		"debug_01":
 			return _debug_01()
+		"ch01_01":
+			return _ch01_01()
+		"ch01_02":
+			return _ch01_02()
+		"ch01_03":
+			return _ch01_03()
+		"ch01_04":
+			return _ch01_04()
+		"ch01_05":
+			return _ch01_05()
+		"ch02_01":
+			return _ch02_01()
+		"ch02_02":
+			return _ch02_02()
 		"ch03_01":
 			return _ch03_01()
 	push_error("LevelRegistry: 未知关卡 '%s'" % id)
 	return null
+
+# ---------------------------------------------------------------- 第一章：教学序列（占位剧情：梁山初起，官军剿匪）
+
+static func _ch01_01() -> LevelConfig:
+	# 教学 1：移动与普攻（教学提示经剧情对话给出）
+	var l := _teaching_base("ch01_01", "教学·移动与攻击", 1)
+	l.enemies = [
+		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 2)},
+	]
+	l.triggers = [{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+		{"type": "dialogue", "text": "【教学】左键点蓝色高亮格移动，点红圈敌人攻击。速度快的一方可能连续行动。"},
+		{"type": "dialogue", "text": "石勇：官兵围上来了，兄弟们，跟我顶住！"}]}]
+	return l
+
+static func _ch01_02() -> LevelConfig:
+	# 教学 2：地形与高低差（森林闪避、高台加成、背刺）
+	var l := _teaching_base("ch01_02", "教学·地形与走位", 2)
+	l.terrain_map = {
+		Vector2i(2, 2): &"forest", Vector2i(3, 2): &"forest", Vector2i(2, 3): &"forest",
+		Vector2i(5, 3): &"hill", Vector2i(6, 3): &"hill", Vector2i(4, 4): &"barricade",
+	}
+	l.height_map = {Vector2i(5, 3): 1, Vector2i(6, 3): 1}
+	l.enemies = [
+		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 1)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 1)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(3, 1)},
+	]
+	l.triggers = [{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+		{"type": "dialogue", "text": "【教学】森林里闪避更高；高台打低处伤害更高；绕到敌人背后是背刺加成。"}]}]
+	return l
+
+static func _ch01_03() -> LevelConfig:
+	# 教学 3：技能与怒气（Q/W 施放、待机回怒）
+	var l := _teaching_base("ch01_03", "教学·技能与怒气", 3)
+	l.enemies = [
+		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 1)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(5, 1)},
+	]
+	l.triggers = [{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+		{"type": "dialogue", "text": "【教学】Q 放主动技，W 放绝技（怒气满 100）。攻击、受击、待机都会攒怒气。"}]}]
+	return l
+
+static func _ch01_04() -> LevelConfig:
+	# 坚守关：坚持 5 回合（非歼灭胜利教学）
+	var l := _teaching_base("ch01_04", "坚守·山寨大门", 4)
+	l.terrain_map = {Vector2i(3, 3): &"camp", Vector2i(4, 3): &"camp",
+		Vector2i(2, 2): &"barricade", Vector2i(5, 2): &"barricade"}
+	l.win_condition = {"type": "SURVIVE_TURNS", "turns": 5}
+	l.enemies = [
+		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 0)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 0)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(2, 1)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(5, 1)},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "【教学】坚守 5 回合即胜，不必硬拼。营帐格每回合回血。"}]},
+		{"id": "t2", "once": true, "on": {"type": "TURN", "turn": 3}, "actions": [
+			{"type": "dialogue", "text": "官军增援从北面杀到！"},
+			{"type": "spawn", "units": [{"unit": &"xiangjun_spear", "coords": Vector2i(4, 0), "team": "enemy"}]}]},
+	]
+	return l
+
+static func _ch01_05() -> LevelConfig:
+	# 章末 BOSS 关：击杀头目即胜（老都管客串小头目）
+	var l := _teaching_base("ch01_05", "头目·都监亲兵", 5)
+	l.win_condition = {"type": "KILL_BOSS"}
+	l.enemies = [
+		{"unit": &"lao_duguan", "coords": Vector2i(4, 1), "elite": true, "boss": true},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 2)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 2)},
+	]
+	l.triggers = [{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+		{"type": "dialogue", "text": "【教学】斩杀头目即胜。老都管会给亲兵鼓劲，优先集火（F 键标记）。"}]}]
+	l.rewards = {"first_clear": {"gold": 800, "breakthrough_mat": 2}, "regular": {"gold": 200}}
+	return l
+
+## 第一章公共底：歼灭胜利、教学三人组必出、奖励占位
+static func _teaching_base(id: String, name: String, rec_level: int) -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = id
+	l.name = name
+	l.chapter = 1
+	l.recommended_level = rec_level
+	l.grid_size = Vector2i(8, 8)
+	l.win_condition = {"type": "WIPE_OUT"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = [&"shi_yong"]
+	l.roster = [&"song_wan", &"du_qian"]
+	l.deploy_zone = Rect2i(0, 6, 8, 2)
+	l.max_deploy = 4
+	l.rewards = {"first_clear": {"gold": 400, "breakthrough_mat": 1}, "regular": {"gold": 120}}
+	return l
+
+# ---------------------------------------------------------------- 第二章：七星聚义（生辰纲前奏，占位剧情）
+
+static func _ch02_01() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "ch02_01"
+	l.name = "聚义·东溪村"
+	l.chapter = 2
+	l.recommended_level = 8
+	l.grid_size = Vector2i(8, 8)
+	l.terrain_map = {Vector2i(2, 2): &"forest", Vector2i(3, 2): &"forest", Vector2i(4, 4): &"road", Vector2i(4, 3): &"road"}
+	l.win_condition = {"type": "WIPE_OUT"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = [&"shi_yong"]
+	l.roster = [&"song_wan", &"du_qian", &"wang_dingliu"]
+	l.deploy_zone = Rect2i(0, 6, 8, 2)
+	l.max_deploy = 4
+	l.npc_allies = [{"unit": &"chao_gai_npc", "coords": Vector2i(3, 5)}]
+	l.enemies = [
+		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 1)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 1)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 2)},
+	]
+	l.triggers = [{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+		{"type": "dialogue", "text": "晁盖：官兵查到东溪村来了！诸位兄弟，随我杀出去！"},
+		{"type": "dialogue", "text": "【教学】绿圈是 AI 操控的友军，会自行作战。"}]}]
+	l.rewards = {"first_clear": {"gold": 600, "breakthrough_mat": 1}, "regular": {"gold": 150}}
+	return l
+
+static func _ch02_02() -> LevelConfig:
+	# 章末：护送晁盖突围（ESCORT 胜利教学）
+	var l := LevelConfig.new()
+	l.id = "ch02_02"
+	l.name = "突围·石碣村"
+	l.chapter = 2
+	l.recommended_level = 10
+	l.grid_size = Vector2i(10, 8)
+	for y in range(8):
+		l.terrain_map[Vector2i(4, y)] = &"road"
+	for c in [Vector2i(1, 2), Vector2i(2, 2), Vector2i(7, 3), Vector2i(8, 3)]:
+		l.terrain_map[c] = &"forest"
+	l.win_condition = {"type": "ESCORT", "unit": "chao_gai_npc", "zone": Rect2i(0, 0, 10, 1)}
+	l.lose_conditions = [{"type": "WIPED_OUT"}, {"type": "ESCORT_DEAD", "unit": "chao_gai_npc"}]
+	l.required_units = [&"shi_yong"]
+	l.roster = [&"song_wan", &"du_qian", &"wang_dingliu"]
+	l.deploy_zone = Rect2i(0, 6, 10, 2)
+	l.max_deploy = 4
+	l.npc_allies = [
+		{"unit": &"chao_gai_npc", "coords": Vector2i(4, 6)},
+		{"unit": &"liu_tang_npc", "coords": Vector2i(5, 6)},
+	]
+	l.enemies = [
+		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 2)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 1)},
+		{"unit": &"lao_duguan", "coords": Vector2i(4, 0), "elite": true},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "【教学】护送晁盖抵达北面村口（第一排）即胜；晁盖阵亡即败。"}]},
+		{"id": "t2", "once": true, "on": {"type": "TURN", "turn": 3}, "actions": [
+			{"type": "dialogue", "text": "两侧芦苇荡杀出伏兵！"},
+			{"type": "spawn", "units": [
+				{"unit": &"xiangjun_spear", "coords": Vector2i(1, 3), "team": "enemy"},
+				{"unit": &"xiangjun_spear", "coords": Vector2i(8, 2), "team": "enemy"},
+			]}]},
+	]
+	l.rewards = {"first_clear": {"gold": 800, "breakthrough_mat": 2}, "regular": {"gold": 200}}
+	return l
 
 ## 调试关卡：3 必出 + 候选池布阵，歼灭胜利，演示 TURN/ENTER_ZONE 两类触发器。
 static func _debug_01() -> LevelConfig:
