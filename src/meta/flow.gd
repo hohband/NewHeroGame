@@ -54,6 +54,8 @@ static func apply_battle_result(profile: PlayerProfile, level: LevelConfig, resu
 		var ups := Progression.add_exp(h, summary["exp_each"], loader.progression)
 		if ups > 0:
 			summary["level_ups"][u.data.unit_id] = ups
+	# 山寨产出：每通关一次收获一轮（策划文档第三章）
+	summary["village"] = VillageSystem.collect(profile, loader)
 	return summary
 
 ## 章节的最后一关（解锁下一章与「通关解锁」武将的判定；只看 ch 前缀的主线关卡）

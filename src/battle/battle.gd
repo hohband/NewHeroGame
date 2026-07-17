@@ -33,6 +33,7 @@ var pending_skill: SkillData = null   # 已选择、等待指向的技能（line
 var selected_roster := -1             # 布阵：选中的候选序号（roster_ids 下标）
 var roster_ids: Array[StringName] = []  # 候选池（按档案拥有情况过滤后）
 var _result_shown := false
+var cursor := Vector2i(0, 0)            # 手柄虚拟光标（Deck 适配，M2）
 
 func _ready() -> void:
 	position = ORIGIN
@@ -66,7 +67,19 @@ func _unhandled_input(event: InputEvent) -> void:
 # ---- 布阵 ----
 
 func _handle_deploy_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ENTER:
+	if _joy_cursor(event):
+		return
+	if event.is_action_pressed("battle_rb"):
+		_cycle_roster(1)
+		return
+	if event.is_action_pressed("battle_lb"):
+		_cycle_roster(-1)
+		return
+	if event.is_action_pressed("battle_confirm"):
+		_deploy_at_cell(cursor)
+		return
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ENTER \
+			or event.is_action_pressed("battle_wait"):
 		if manager.confirm_deploy():
 			print("开战！")
 		return
@@ -79,18 +92,43 @@ func _handle_deploy_input(event: InputEvent) -> void:
 			queue_redraw()
 			return
 		# 点部署区
-		var cell_coords := _pos_to_cell(pos)
-		if not manager.level.deploy_zone.has_point(cell_coords):
-			return
-		var cell := grid.get_cell(cell_coords)
-		if cell.occupant != null and manager.deployed.has(cell.occupant):
-			manager.undeploy_unit(cell.occupant)   # 点已上阵单位：撤下
-			return
-		if selected_roster != -1:
-			var id: StringName = roster_ids[selected_roster]
-			var hero := SaveSystem.profile.get_hero(id) if SaveSystem.profile != null else null
-			manager.deploy_unit(id, cell_coords, hero)
-			selected_roster = -1
+		_deploy_at_cell(_pos_to_cell(pos))
+
+func _deploy_at_cell(cell_coords: Vector2i) -> void:
+	if not manager.level.deploy_zone.has_point(cell_coords):
+		return
+	var cell := grid.get_cell(cell_coords)
+	if cell.occupant != null and manager.deployed.has(cell.occupant):
+		manager.undeploy_unit(cell.occupant)   # 点已上阵单位：撤下
+		return
+	if selected_roster != -1:
+		var id: StringName = roster_ids[selected_roster]
+		var hero := SaveSystem.profile.get_hero(id) if SaveSystem.profile != null else null
+		manager.deploy_unit(id, cell_coords, hero)
+		selected_roster = -1
+
+func _cycle_roster(dir: int) -> void:
+	if roster_ids.is_empty():
+		return
+	selected_roster = (selected_roster + dir + roster_ids.size()) % roster_ids.size()
+	queue_redraw()
+
+## 手柄虚拟光标移动；事件被消费时返回 true
+func _joy_cursor(event: InputEvent) -> bool:
+	var d := Vector2i.ZERO
+	if event.is_action_pressed("battle_left"):
+		d = Vector2i(-1, 0)
+	elif event.is_action_pressed("battle_right"):
+		d = Vector2i(1, 0)
+	elif event.is_action_pressed("battle_up"):
+		d = Vector2i(0, -1)
+	elif event.is_action_pressed("battle_down"):
+		d = Vector2i(0, 1)
+	if d == Vector2i.ZERO:
+		return false
+	cursor = (cursor + d).clamp(Vector2i.ZERO, grid.size - Vector2i.ONE)
+	queue_redraw()
+	return true
 
 func _roster_index_at(pos: Vector2) -> int:
 	for i in roster_ids.size():
@@ -105,6 +143,41 @@ func _pos_to_cell(pos: Vector2) -> Vector2i:
 # ---- 战斗 ----
 
 func _handle_battle_input(event: InputEvent) -> void:
+	if _joy_cursor(event):
+		return
+	if event.is_action_pressed("battle_confirm"):
+		_handle_cell_click(cursor)
+		return
+	if event.is_action_pressed("battle_cancel"):
+		pending_skill = null
+		queue_redraw()
+		return
+	if event.is_action_pressed("battle_skill"):
+		var u := manager.active_unit
+		if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE and not manager.action_used:
+			_try_skill(u, false)
+		return
+	if event.is_action_pressed("battle_ult"):
+		var u := manager.active_unit
+		if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE and not manager.action_used:
+			_try_skill(u, true)
+		return
+	if event.is_action_pressed("battle_lb"):
+		var u := manager.active_unit
+		if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE and not manager.action_used:
+			_try_interact(u)
+		return
+	if event.is_action_pressed("battle_rb"):
+		var cell := grid.get_cell(cursor)
+		if cell != null and cell.occupant != null and cell.occupant.team == Unit.Team.ENEMY:
+			manager.set_focus_target(null if manager.focus_target == cell.occupant else cell.occupant)
+		return
+	if event.is_action_pressed("battle_wait"):
+		var u := manager.active_unit
+		if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE:
+			manager.submit_command(WaitCommand.new(u))
+			manager.finish_turn()
+		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
 		var u := manager.active_unit
 		if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE:
@@ -131,7 +204,7 @@ func _handle_battle_input(event: InputEvent) -> void:
 			manager.run_ai()
 		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_F:
-		var cell := grid.get_cell(_mouse_cell())
+		var cell := grid.get_cell(cursor)
 		if cell != null and cell.occupant != null and cell.occupant.team == Unit.Team.ENEMY:
 			if manager.focus_target == cell.occupant:
 				manager.set_focus_target(null)
@@ -331,6 +404,9 @@ func _draw() -> void:
 		_draw_highlights()
 	_draw_units()
 	_draw_preview_bar()
+	# 手柄虚拟光标
+	if grid.is_inside(cursor):
+		draw_rect(Rect2(Vector2(cursor) * CELL, Vector2(CELL, CELL)), Color(1, 1, 1, 0.85), false, 2.0)
 
 func _draw_terrain() -> void:
 	for coords: Vector2i in grid.cells:

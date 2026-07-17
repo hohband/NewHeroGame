@@ -6,6 +6,7 @@ func _ready() -> void:
 	if SaveSystem.profile == null and SaveSystem.has_save():
 		SaveSystem.load_game()
 	_build_main()
+	_focus_first()
 
 func _clear() -> void:
 	for c in get_children():
@@ -27,6 +28,16 @@ func _panel(title_text: String) -> VBoxContainer:
 	var sep := HSeparator.new()
 	vbox.add_child(sep)
 	return vbox
+
+## 手柄/键盘焦点：每个界面默认聚焦第一个按钮（Deck 适配，M2）
+func _focus_first() -> void:
+	var queue := get_children()
+	while not queue.is_empty():
+		var c: Node = queue.pop_front()
+		if c is Button and not c.disabled:
+			c.grab_focus()
+			return
+		queue.append_array(c.get_children())
 
 # ---------------------------------------------------------------- 主菜单
 
@@ -61,6 +72,7 @@ func _build_main() -> void:
 		SaveSystem.save_game()
 		_build_main())
 	vbox.add_child(new_btn)
+	_focus_first()
 
 func _resource_text() -> String:
 	var p := SaveSystem.profile
@@ -95,6 +107,7 @@ func _build_levels() -> void:
 			get_tree().change_scene_to_file("res://scenes/battle/battle.tscn"))
 		vbox.add_child(b)
 	_back_row(vbox)
+	_focus_first()
 
 # ---------------------------------------------------------------- 武将养成
 
@@ -182,16 +195,74 @@ func _build_roster() -> void:
 				_build_roster())
 			list.add_child(b)
 	_back_row(vbox)
+	_focus_first()
 
 func _stars(n: int) -> String:
 	return "★".repeat(n)
 
-# ---------------------------------------------------------------- 山寨（占位，下一阶段）
+# ---------------------------------------------------------------- 山寨经营
 
 func _build_village() -> void:
-	var vbox := _panel("山寨")
+	var vbox := _panel("山寨经营　（%s）" % _resource_text())
+	var village := VillageSystem.get_village(SaveSystem.profile)
+	for id in VillageSystem.BUILDING_NAMES:
+		var b: Dictionary = village[id]
+		var prod := VillageSystem.production(SaveSystem.profile, id)
+		var box := HBoxContainer.new()
+		box.add_theme_constant_override("separation", 8)
+		var info := Label.new()
+		info.custom_minimum_size = Vector2(290, 0)
+		var assigned := String(b.get("assigned", ""))
+		var assigned_name := "空岗" if assigned == "" else DataLoader.get_unit(StringName(assigned)).name
+		info.text = "%s Lv.%d｜派驻：%s｜每通关：%s" % [
+			VillageSystem.BUILDING_NAMES[id], int(b["level"]), assigned_name, _prod_text(prod)]
+		box.add_child(info)
+		# 升级
+		var up_btn := Button.new()
+		var maxed := int(b["level"]) >= VillageSystem.MAX_LEVEL
+		up_btn.text = "已满级" if maxed else "升级(%d金)" % VillageSystem.upgrade_cost(int(b["level"]))
+		up_btn.disabled = maxed or not VillageSystem.can_upgrade(SaveSystem.profile, id)
+		var bid: StringName = id
+		up_btn.pressed.connect(func():
+			VillageSystem.upgrade(SaveSystem.profile, bid)
+			SaveSystem.save_game()
+			_build_village())
+		box.add_child(up_btn)
+		# 派驻（循环切换：空岗 → 各武将）
+		var as_btn := Button.new()
+		as_btn.text = "调换岗位"
+		as_btn.pressed.connect(func():
+			_cycle_assign(bid)
+			SaveSystem.save_game()
+			_build_village())
+		box.add_child(as_btn)
+		vbox.add_child(box)
 	var tip := Label.new()
-	tip.text = "聚义厅、铁匠铺、演武场……经营建设下一阶段开工。"
-	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tip.text = "派驻加成 +25%；汤隆驻铁匠铺再 +25%。每通关一次关卡收获一轮。"
 	vbox.add_child(tip)
 	_back_row(vbox)
+	_focus_first()
+
+func _prod_text(prod: Dictionary) -> String:
+	if prod.has("gold"):
+		return "金币 %d" % int(prod["gold"])
+	if prod.has("breakthrough_mat"):
+		return "突破材料 %d" % int(prod["breakthrough_mat"])
+	if prod.has("exp"):
+		return "全员经验 %d" % int(prod["exp"])
+	return ""
+
+func _cycle_assign(building: StringName) -> void:
+	var village := VillageSystem.get_village(SaveSystem.profile)
+	var current := String(village[building].get("assigned", ""))
+	var ids := SaveSystem.profile.heroes.keys()
+	if ids.is_empty():
+		return
+	# 空岗 → 第 1 个；依次轮换；最后回到空岗
+	var idx := ids.find(current)
+	if idx == -1:
+		VillageSystem.assign(SaveSystem.profile, building, ids[0])
+	elif idx == ids.size() - 1:
+		VillageSystem.unassign(SaveSystem.profile, building)
+	else:
+		VillageSystem.assign(SaveSystem.profile, building, ids[idx + 1])

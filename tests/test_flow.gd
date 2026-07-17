@@ -19,7 +19,7 @@ func test_first_clear_and_regular_rewards() -> void:
 	var gold_before: int = profile.gold
 	var s := Flow.apply_battle_result(profile, level, _result(), [], loader)
 	assert_true(s["first_clear"])
-	assert_eq(profile.gold, gold_before + 400, "首通金币 400")
+	assert_eq(profile.gold, gold_before + 400 + 100, "首通金币 400 + 聚义厅产出 100（D33）")
 	assert_true(profile.progress["cleared"].has("ch01_01"))
 	# 重复通关：regular 奖励
 	var s2 := Flow.apply_battle_result(profile, level, _result(), [], loader)
@@ -75,7 +75,7 @@ func test_exp_to_deployed_heroes() -> void:
 	u.hero = h
 	var s := Flow.apply_battle_result(profile, level, _result(), [u], loader)
 	assert_eq(int(s["exp_each"]), 50, "第一章经验 30+20×1 = 50")
-	assert_eq(h.exp, 50)
+	assert_eq(h.exp, 80, "上阵 50 + 演武场全员 30（D33）")
 
 # ---------------------------------------------------------------- 招募
 
