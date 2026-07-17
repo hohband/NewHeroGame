@@ -27,13 +27,24 @@ func execute(battle: BattleManager) -> Array:
 	var events: Array = []
 	var killed_any := false
 	for t in targets:
-		var ctx := EffectContext.new(actor, t, battle.grid, battle.rolls)
+		var ctx := EffectContext.new(actor, t, battle.grid, battle.rolls, battle)
 		events.append_array(EffectSystem.execute(skill, ctx))
 		if not t.is_alive():
 			killed_any = true
-	# refresh_on_kill：本技能造成击杀则再动（AV 清零，决策日志 D22）
+	# 修正类后处理（决策日志 D21/D22）：refresh_on_kill 与 extra_action
 	for eff in EffectSystem.parse_effects(skill.effects):
 		if eff["name"] == "refresh_on_kill" and killed_any:
 			actor.extra_action_pending = true
+		if eff["name"] == "extra_action":
+			# 令 AV 最高（即将行动）的 n 名友军再动（表15：给「下回合行动价值最高」的队友）
+			var n := int(eff["args"][0])
+			var allies: Array[Unit] = []
+			for t in targets:
+				if t != actor and t.is_alive() and t.team == actor.team:
+					allies.append(t)
+			allies.sort_custom(func(a, b): return a.av < b.av)
+			for i in range(mini(n, allies.size())):
+				allies[i].av = 0.0
+				events.append({"type": "extra_action", "target": allies[i]})
 	actor.set_cooldown(skill)
 	return events

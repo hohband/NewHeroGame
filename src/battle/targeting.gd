@@ -6,6 +6,10 @@ extends RefCounted
 ## 多目标时效果序列逐目标执行（决策日志 D23）。
 
 static func resolve(skill: SkillData, caster: Unit, aim: Vector2i, grid: Grid, units: Array[Unit], rolls: RollSource) -> Array[Unit]:
+	return resolve_from(skill, caster, aim, grid, units, rolls, caster.coords)
+
+## 从指定原点解析（AI 评估候选落点用）；origin 通常为 caster.coords。
+static func resolve_from(skill: SkillData, caster: Unit, aim: Vector2i, grid: Grid, units: Array[Unit], rolls: RollSource, origin: Vector2i) -> Array[Unit]:
 	var out: Array[Unit] = []
 	if String(skill.range_shape) == "self":
 		out.append(caster)
@@ -15,7 +19,7 @@ static func resolve(skill: SkillData, caster: Unit, aim: Vector2i, grid: Grid, u
 				continue
 			if not _target_filter(skill, caster, u):
 				continue
-			if not _in_area(skill, caster, aim, u.coords):
+			if not _in_area(skill, origin, aim, u.coords):
 				continue
 			out.append(u)
 	var mods := EffectSystem.scan_modifiers(EffectSystem.parse_effects(skill.effects))
@@ -39,7 +43,7 @@ static func resolve(skill: SkillData, caster: Unit, aim: Vector2i, grid: Grid, u
 		for u in units:
 			if not u.is_alive() or u.team != caster.team or u == caster or out.has(u):
 				continue
-			if _in_area(skill, caster, aim, u.coords) and rolls.roll() < chance:
+			if _in_area(skill, origin, aim, u.coords) and rolls.roll() < chance:
 				out.append(u)
 	return out
 
@@ -53,8 +57,8 @@ static func _target_filter(skill: SkillData, caster: Unit, u: Unit) -> bool:
 			return u == caster
 	return false
 
-static func _in_area(skill: SkillData, caster: Unit, aim: Vector2i, cell: Vector2i) -> bool:
-	var d := cell - caster.coords
+static func _in_area(skill: SkillData, from: Vector2i, aim: Vector2i, cell: Vector2i) -> bool:
+	var d := cell - from
 	var man := absi(d.x) + absi(d.y)
 	var che := maxi(absi(d.x), absi(d.y))
 	match String(skill.range_shape):
@@ -65,12 +69,12 @@ static func _in_area(skill: SkillData, caster: Unit, aim: Vector2i, cell: Vector
 		"all":
 			return true
 		"self":
-			return cell == caster.coords
+			return cell == from
 		"line":
 			if aim == Vector2i(-1, -1):
 				# 无指向：任一直线方向在程内即符合（AI 枚举/预览用）
 				return (d.x == 0 or d.y == 0) and man >= skill.range_min and man <= skill.range_max
-			var dir := DamageCalculator.dominant_dir(aim - caster.coords)
+			var dir := DamageCalculator.dominant_dir(aim - from)
 			if dir == Vector2i.ZERO:
 				return false
 			if dir.x != 0:
@@ -93,6 +97,6 @@ static func cells_in_range(skill: SkillData, caster: Unit, grid: Grid) -> Array[
 	for y in grid.size.y:
 		for x in grid.size.x:
 			var c := Vector2i(x, y)
-			if _in_area(skill, caster, Vector2i(-1, -1), c):
+			if _in_area(skill, caster.coords, Vector2i(-1, -1), c):
 				out.append(c)
 	return out

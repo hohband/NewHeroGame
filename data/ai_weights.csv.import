@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bd1bahhp7yjx8"
+
+[deps]
+
+files=["res://data/ai_weights.damage.translation", "res://data/ai_weights.kill.translation", "res://data/ai_weights.target.translation", "res://data/ai_weights.danger.translation", "res://data/ai_weights.aura.translation", "res://data/ai_weights.position.translation"]
+
+source_file="res://data/ai_weights.csv"
+dest_files=["res://data/ai_weights.damage.translation", "res://data/ai_weights.kill.translation", "res://data/ai_weights.target.translation", "res://data/ai_weights.danger.translation", "res://data/ai_weights.aura.translation", "res://data/ai_weights.position.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

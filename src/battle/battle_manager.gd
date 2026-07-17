@@ -12,6 +12,8 @@ signal unit_died(unit: Unit)
 signal battle_ended(winner_team: int)
 
 enum State { DEPLOY, IDLE, MOVE_PREVIEW, TARGETING, EXECUTING, AI_TURN, BATTLE_END }
+## 自动托管模式（策划文档 8.5）：手动 / 半自动（绝技按表16条件释放）/ 全自动
+enum AutoMode { MANUAL, SEMI, FULL }
 
 var data: GameDataLoader
 var grid: Grid
@@ -22,6 +24,8 @@ var state: State = State.DEPLOY
 var active_unit: Unit = null
 var move_used := false
 var action_used := false
+var auto_mode: AutoMode = AutoMode.MANUAL
+var focus_target: Unit = null   # 集火目标：AI 评分 +100（8.5）
 
 func setup(p_data: GameDataLoader, p_grid: Grid, p_units: Array[Unit]) -> void:
 	data = p_data
@@ -33,6 +37,12 @@ func setup(p_data: GameDataLoader, p_grid: Grid, p_units: Array[Unit]) -> void:
 func set_seed(value: int) -> void:
 	if rolls is RandomRollSource:
 		(rolls as RandomRollSource).set_seed(value)
+
+## 战斗中动态加入单位（召唤物/伏兵，关卡触发器与 summon 效果用）
+func add_unit(u: Unit) -> void:
+	units.append(u)
+	add_child(u)
+	u.died.connect(_on_unit_died)
 
 func change_state(new_state: State) -> void:
 	state = new_state
@@ -116,19 +126,12 @@ func finish_turn() -> void:
 	active_unit = null
 	advance_turn()
 
-func _on_unit_died(unit: Unit) -> void:
-	turn_order.remove(unit)
-	var cell := grid.get_cell(unit.coords)
-	if cell != null and cell.occupant == unit:
-		cell.occupant = null
-	unit_died.emit(unit)
-
 ## 占位胜负判定：一方全灭。正式胜利条件系统（歼灭/护送/占领/坚守/BOSS）见 M1 第 5 阶段。
 func check_winner() -> int:
 	var player_side := false
 	var enemy_side := false
 	for u in units:
-		if not u.is_alive():
+		if not u.is_alive() or u.is_object:
 			continue
 		if u.team == Unit.Team.ENEMY:
 			enemy_side = true
@@ -166,49 +169,28 @@ func basic_attack_skill(unit: Unit) -> SkillData:
 func can_use_skill(unit: Unit, skill: SkillData) -> bool:
 	return unit.rage >= skill.rage_cost and unit.skill_cooldown(skill.skill_id) <= 0
 
-# ---------------------------------------------------------------- 占位 AI
+# ---------------------------------------------------------------- 评分制 AI（策划文档第八章）
 
-## 【占位】朴素敌方 AI：向最近敌人靠近并攻击。正式评分制 AI 见 M1 第 4 阶段（决策日志 D10）。
-func run_placeholder_ai() -> void:
+## 评分制 AI 驱动当前行动单位（敌方固定全自动；我方由 auto_mode 决定，8.5）。
+func run_ai() -> void:
 	if active_unit == null or state == State.BATTLE_END:
 		return
-	var target := _nearest_opponent(active_unit)
-	if target == null:
-		finish_turn()
-		return
-	if not move_used and not in_attack_range(active_unit, target):
-		var reachable := grid.get_reachable(active_unit, active_unit.data.move)
-		var best := active_unit.coords
-		var best_dist := _manhattan(active_unit.coords, target.coords)
-		for c in reachable:
-			var d := _manhattan(c, target.coords)
-			if d < best_dist:
-				best_dist = d
-				best = c
-		if best != active_unit.coords:
-			var path := grid.find_path(active_unit, best)
-			if not path.is_empty():
-				path.remove_at(0)   # 去掉起点
-				submit_command(MoveCommand.new(active_unit, path))
-		move_used = true
-	if not action_used and in_attack_range(active_unit, target):
-		submit_command(AttackCommand.new(active_unit, target, basic_attack_skill(active_unit)))
-		action_used = true
+	var plan := BattleAI.decide(active_unit, self)
+	for cmd in plan:
+		if state == State.BATTLE_END:
+			break
+		submit_command(cmd)
 	finish_turn()
 
-func _nearest_opponent(unit: Unit) -> Unit:
-	var best: Unit = null
-	var best_dist := 9999
-	for u in units:
-		if not u.is_alive() or u.team == unit.team:
-			continue
-		if unit.team != Unit.Team.ENEMY and u.team == Unit.Team.NPC_ALLY:
-			continue   # 我方不打 NPC 友军
-		var d := _manhattan(unit.coords, u.coords)
-		if d < best_dist:
-			best_dist = d
-			best = u
-	return best
+## 设置/切换集火目标（死亡自动清除）
+func set_focus_target(u: Unit) -> void:
+	focus_target = u
 
-static func _manhattan(a: Vector2i, b: Vector2i) -> int:
-	return absi(a.x - b.x) + absi(a.y - b.y)
+func _on_unit_died(unit: Unit) -> void:
+	turn_order.remove(unit)
+	var cell := grid.get_cell(unit.coords)
+	if cell != null and cell.occupant == unit:
+		cell.occupant = null
+	if focus_target == unit:
+		focus_target = null
+	unit_died.emit(unit)

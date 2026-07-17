@@ -7,6 +7,7 @@ extends Node
 const UNITS_CSV := "res://data/units.csv"
 const SKILLS_CSV := "res://data/skills.csv"
 const TERRAINS_CSV := "res://data/terrains.csv"
+const AI_WEIGHTS_CSV := "res://data/ai_weights.csv"
 const RESERVED_TXT := "res://data/reserved_units.txt"
 
 const QUALITIES: Array[StringName] = [&"orange", &"purple", &"blue", &"green"]
@@ -18,6 +19,7 @@ const TARGETS: Array[StringName] = [&"enemy", &"ally", &"self"]
 var units: Dictionary = {}      # unit_id -> UnitData
 var skills: Dictionary = {}     # skill_id -> SkillData
 var terrains: Dictionary = {}   # terrain_id -> TerrainData
+var ai_weights: Dictionary = {} # class -> {factor -> float}（策划文档 8.3 权重表）
 var reserved: Dictionary = {}   # 预留武将（未实装）：StringName -> true
 
 func _ready() -> void:
@@ -27,6 +29,7 @@ func load_all() -> void:
 	terrains = _load_terrains(TERRAINS_CSV)
 	skills = _load_skills(SKILLS_CSV)
 	units = _load_units(UNITS_CSV)
+	ai_weights = _load_ai_weights(AI_WEIGHTS_CSV)
 	reserved = _load_reserved(RESERVED_TXT)
 
 func get_unit(id: StringName) -> UnitData:
@@ -45,6 +48,13 @@ func get_skill_for_unit(unit_id: StringName, type: StringName) -> SkillData:
 		if s.owner == String(unit_id) and s.type == type:
 			return s
 	return null
+
+## 职业 AI 权重（ai_weights.csv）；缺行时退回全 1.0 并告警
+func get_ai_weights(class_id: StringName) -> Dictionary:
+	if not ai_weights.has(class_id):
+		push_warning("DataLoader: 职业 %s 缺少 AI 权重行，按全 1.0 处理" % class_id)
+		return {"damage_expect": 1.0, "kill_bonus": 1.0, "target_value": 1.0, "danger": 1.0, "aura_coverage": 1.0, "position": 1.0}
+	return ai_weights[class_id]
 
 # ---------------------------------------------------------------- CSV 解析
 
@@ -146,6 +156,19 @@ static func _load_terrains(path: String) -> Dictionary:
 		out[t.terrain_id] = t
 	return out
 
+static func _load_ai_weights(path: String) -> Dictionary:
+	var out: Dictionary = {}
+	for row in _read_table(path):
+		out[StringName(row.get("class", ""))] = {
+			"damage_expect": float(str(row.get("damage_expect", "1.0"))),
+			"kill_bonus": float(str(row.get("kill_bonus", "1.0"))),
+			"target_value": float(str(row.get("target_value", "1.0"))),
+			"danger": float(str(row.get("danger", "1.0"))),
+			"aura_coverage": float(str(row.get("aura_coverage", "1.0"))),
+			"position": float(str(row.get("position", "1.0"))),
+		}
+	return out
+
 static func _load_reserved(path: String) -> Dictionary:
 	var out: Dictionary = {}
 	var f := FileAccess.open(path, FileAccess.READ)
@@ -182,6 +205,8 @@ func validate() -> Array[String]:
 			errors.append("武将 %s：非法 quality '%s'" % [id, u.quality])
 		if not CLASSES.has(u.unit_class):
 			errors.append("武将 %s：非法 class '%s'" % [id, u.unit_class])
+		if not ai_weights.has(u.unit_class):
+			errors.append("武将 %s：职业 %s 缺少 AI 权重行（ai_weights.csv）" % [id, u.unit_class])
 		if not skills.has(u.skill_signature):
 			errors.append("武将 %s：skill_signature '%s' 不在技能表" % [id, u.skill_signature])
 		for b in u.bonds:

@@ -15,5 +15,5 @@ func execute(battle: BattleManager) -> Array:
 		return []
 	if target.coords != actor.coords:
 		actor.facing = DamageCalculator.dominant_dir(target.coords - actor.coords)
-	var ctx := EffectContext.new(actor, target, battle.grid, battle.rolls)
+	var ctx := EffectContext.new(actor, target, battle.grid, battle.rolls, battle)
 	return EffectSystem.execute(skill, ctx)

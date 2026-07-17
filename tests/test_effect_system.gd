@@ -71,7 +71,7 @@ func test_execute_kill_grants_bonus_rage() -> void:
 func test_unimplemented_effect_does_not_crash() -> void:
 	var skill := SkillData.new()
 	skill.skill_id = &"test_unknown"
-	skill.effects = "counter(1)"   # 反击状态尚未注册
+	skill.effects = "nonexistent_effect(1)"   # 词表外的非法效果
 	var events := EffectSystem.execute(skill, EffectContext.new())
 	assert_eq(events.size(), 0, "未实现效果：报错跳过，不崩溃、不产生事件")
 	assert_push_error("未实现的原子效果")
@@ -146,6 +146,6 @@ func test_random_buff_picks_first_option() -> void:
 func test_random_buff_unimplemented_option_safe() -> void:
 	var f: Dictionary = _buff_ctx()
 	var ctx := EffectContext.new(f["actor"], f["actor"], f["grid"], FixedRollSource.new([99.0]))
-	EffectSystem.execute(_skill(&"t", "random_buff(def_up,0.4,2|counter,1)"), ctx)
-	assert_eq(f["actor"].get_def(f["grid"]), 50, "选中未实现的 counter：报错跳过")
+	EffectSystem.execute(_skill(&"t", "random_buff(def_up,0.4,2|nonexistent_fx,1)"), ctx)
+	assert_eq(f["actor"].get_def(f["grid"]), 50, "选中未实现选项：报错跳过")
 	assert_push_error("未实现的原子效果")

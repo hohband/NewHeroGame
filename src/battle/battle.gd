@@ -74,13 +74,16 @@ func _spawn(data: GameDataLoader, id: StringName, team: Unit.Team, coords: Vecto
 
 func _on_turn_started(unit: Unit) -> void:
 	reachable.clear()
-	if unit.team == Unit.Team.PLAYER:
+	pending_skill = null
+	if unit.team == Unit.Team.PLAYER and manager.auto_mode == BattleManager.AutoMode.MANUAL:
 		reachable = grid.get_reachable(unit, unit.get_move(grid))
 	queue_redraw()
-	if unit.team != Unit.Team.PLAYER:
+	# 敌方固定 AI；我方在自动/半自动托管下也由评分 AI 驱动（策划文档 8.5）
+	var ai_driven := unit.team != Unit.Team.PLAYER or manager.auto_mode != BattleManager.AutoMode.MANUAL
+	if ai_driven:
 		await get_tree().create_timer(0.35).timeout
 		if is_instance_valid(manager) and manager.active_unit == unit and manager.state != BattleManager.State.BATTLE_END:
-			manager.run_placeholder_ai()
+			manager.run_ai()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if manager == null or manager.state == BattleManager.State.BATTLE_END:
@@ -95,6 +98,26 @@ func _unhandled_input(event: InputEvent) -> void:
 		var u := manager.active_unit
 		if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE and not manager.action_used:
 			_try_skill(u, KEY_W == event.keycode)
+		return
+	if event is InputEventKey and event.pressed and event.keycode in [KEY_1, KEY_2, KEY_3]:
+		# 1=手动 2=半自动 3=全自动（8.5）
+		manager.auto_mode = [BattleManager.AutoMode.MANUAL, BattleManager.AutoMode.SEMI, BattleManager.AutoMode.FULL][event.keycode - KEY_1]
+		print("托管模式：%s" % ["手动", "半自动", "全自动"][event.keycode - KEY_1])
+		# 若当前是我方回合且刚切到托管，立即接管
+		var u := manager.active_unit
+		if manager.auto_mode != BattleManager.AutoMode.MANUAL and u != null and u.team == Unit.Team.PLAYER:
+			manager.run_ai()
+		return
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F:
+		# F：标记/取消鼠标下的敌人为集火目标（评分 +100，8.5）
+		var cell := grid.get_cell(_mouse_cell())
+		if cell != null and cell.occupant != null and cell.occupant.team == Unit.Team.ENEMY:
+			if manager.focus_target == cell.occupant:
+				manager.set_focus_target(null)
+				print("取消集火")
+			else:
+				manager.set_focus_target(cell.occupant)
+				print("集火目标：%s" % cell.occupant.display_name())
 		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		pending_skill = null
@@ -223,6 +246,8 @@ func _draw_units() -> void:
 		draw_arc(center, CELL * 0.32, 0, TAU, 24, Color("263238"), 2.0)
 		if u == manager.active_unit:
 			draw_arc(center, CELL * 0.40, 0, TAU, 24, Color.WHITE, 3.0)
+		if u == manager.focus_target:
+			draw_arc(center, CELL * 0.46, 0, TAU, 24, Color("C99B3F"), 3.0)   # 集火标记（赤金）
 		# 朝向指示
 		draw_line(center, center + Vector2(u.facing) * CELL * 0.30, Color("F5F1E8"), 3.0)
 		# HP 条（宣纸底 + 甲青/朱砂）与怒气细条

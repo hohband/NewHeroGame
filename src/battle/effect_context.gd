@@ -8,9 +8,16 @@ var grid: Grid
 var rolls: RollSource
 ## 修正类效果集中（前置扫描，决策日志 D21）：sure_hit / hit_rate / bonus_* / execute_below 等
 var mods: Dictionary = {}
+## 反击递归深度（防止无限互反，决策日志 D27）
+var depth := 0
+## 本次施放召唤出的物件（summon 效果写入，aura 效果读取）
+var summoned: Unit = null
+## 战斗总控引用（summon 注册新单位用）
+var battle: BattleManager = null
 
-func _init(p_actor: Unit = null, p_target: Unit = null, p_grid: Grid = null, p_rolls: RollSource = null) -> void:
+func _init(p_actor: Unit = null, p_target: Unit = null, p_grid: Grid = null, p_rolls: RollSource = null, p_battle: BattleManager = null) -> void:
 	actor = p_actor
 	target = p_target
 	grid = p_grid
 	rolls = p_rolls
+	battle = p_battle

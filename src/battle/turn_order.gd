@@ -31,7 +31,7 @@ func preview(units: Array[Unit], count: int) -> Array[Unit]:
 	var alive: Array[Unit] = []
 	var sim: Dictionary = {}   # Unit -> av 副本
 	for u in units:
-		if u.is_alive():
+		if u.is_alive() and not u.is_object:
 			alive.append(u)
 			sim[u] = u.av
 	var queue: Array[Unit] = _ready.duplicate()
@@ -60,7 +60,7 @@ func preview(units: Array[Unit], count: int) -> Array[Unit]:
 func _tick(units: Array[Unit]) -> void:
 	var alive: Array[Unit] = []
 	for u in units:
-		if u.is_alive():
+		if u.is_alive() and not u.is_object:   # 物件不行动（决策日志 D27）
 			alive.append(u)
 	if alive.is_empty():
 		return
