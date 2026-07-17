@@ -105,6 +105,17 @@ func place_unit(unit: Unit, at: Vector2i) -> void:
 	unit.coords = at
 	cells[at].occupant = unit
 
+## 运行时改变格子地形（触发器「地形变化」，策划文档 6.9）
+func set_terrain(coords: Vector2i, tid: StringName) -> void:
+	var cell := get_cell(coords)
+	if cell == null:
+		return
+	cell.terrain = data.get_terrain(tid)
+	if cell.terrain == null:
+		push_error("Grid.set_terrain: 未知地形 '%s'" % tid)
+		cell.terrain = data.get_terrain(&"plain")
+	cell.obstacle_hp = cell.terrain.hp if (cell.terrain.destructible and cell.terrain.hp > 0) else 0
+
 func move_unit(unit: Unit, to: Vector2i) -> void:
 	var from_cell := get_cell(unit.coords)
 	if from_cell != null and from_cell.occupant == unit:

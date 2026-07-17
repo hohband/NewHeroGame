@@ -1,10 +1,12 @@
 extends Node2D
-## 调试战斗场景（W1-2）：8×8 调试关卡，纯占位表现，验证棋盘/寻路/移动/普攻闭环。
-## 操作：左键点可达格移动，左键点攻击范围内的敌人普攻，空格结束行动。
-## 正式 UI、布阵阶段、关卡加载在后续阶段替换本场景的临时表现（决策日志 D10/D12）。
+## 调试战斗场景（M1）：布阵阶段 → CTB 战斗循环，全部内容经 LevelConfig 驱动。
+## 布阵：左键点候选（左侧竖条，稀有度配色）→ 点部署区空格上阵；点已上阵单位撤下；回车开战。
+## 战斗：左键移动/普攻，Q 主动技 / W 绝技（line 技能点击指向，ESC/右键取消），空格待机，
+## 　　　1/2/3 手动/半自动/全自动，F 集火。占位表现，正式 UI 在 M2 替换（决策日志 D12/D28）。
 
 const CELL := 64
 const ORIGIN := Vector2(384, 60)
+const LEVEL_ID := "debug_01"
 
 const TERRAIN_COLORS := {
 	&"plain": Color("8FBC4F"),
@@ -16,78 +18,86 @@ const TERRAIN_COLORS := {
 	&"fire": Color("D9642A"),
 	&"road": Color("C9A86A"),
 }
+## 稀有度配色（美术指导第四节：赤金/绛紫/靛青/竹绿）
+const QUALITY_COLORS := {
+	&"orange": Color("C99B3F"),
+	&"purple": Color("7E57C2"),
+	&"blue": Color("3A7BD5"),
+	&"green": Color("8FBC4F"),
+}
 
 var grid: Grid
 var manager: BattleManager
 var reachable: Dictionary = {}
 var pending_skill: SkillData = null   # 已选择、等待指向的技能（line 类）
+var selected_roster := -1             # 布阵：选中的候选序号（level.roster 下标）
 
 func _ready() -> void:
 	position = ORIGIN
-	_build_battle()
+	var level := LevelRegistry.get_level(LEVEL_ID)
+	manager = BattleManager.new()
+	add_child(manager)
+	manager.setup_level(DataLoader, level)
+	grid = manager.grid
 	manager.turn_started.connect(_on_turn_started)
 	manager.command_executed.connect(func(_cmd, _events): queue_redraw())
 	manager.unit_died.connect(func(_u): queue_redraw())
 	manager.battle_ended.connect(_on_battle_ended)
-	manager.start_battle()
-
-func _build_battle() -> void:
-	var data: GameDataLoader = DataLoader   # autoload 单例
-	grid = Grid.new()
-	var terrain_map := {
-		Vector2i(2, 2): &"forest", Vector2i(3, 2): &"forest", Vector2i(2, 3): &"forest",
-		Vector2i(5, 5): &"forest", Vector2i(6, 2): &"hill", Vector2i(6, 3): &"hill",
-		Vector2i(4, 4): &"barricade", Vector2i(3, 4): &"camp", Vector2i(1, 5): &"water",
-		Vector2i(4, 0): &"road", Vector2i(4, 1): &"road",
-	}
-	var height_map := {Vector2i(6, 2): 1, Vector2i(6, 3): 1}
-	grid.setup(data, Vector2i(8, 8), terrain_map, height_map)
-	add_child(grid)
-
-	var units_node := Node2D.new()
-	units_node.name = "Units"
-	add_child(units_node)
-
-	var units: Array[Unit] = []
-	# 我方：原型三将（W1-2 验证对象）；敌方：绿将客串（决策日志 D10）
-	units.append(_spawn(data, &"lin_chong", Unit.Team.PLAYER, Vector2i(2, 6), units_node))
-	units.append(_spawn(data, &"lu_zhishen", Unit.Team.PLAYER, Vector2i(3, 6), units_node))
-	units.append(_spawn(data, &"an_daoquan", Unit.Team.PLAYER, Vector2i(1, 7), units_node))
-	units.append(_spawn(data, &"shi_yong", Unit.Team.ENEMY, Vector2i(5, 1), units_node))
-	units.append(_spawn(data, &"song_wan", Unit.Team.ENEMY, Vector2i(4, 1), units_node))
-	units.append(_spawn(data, &"du_qian", Unit.Team.ENEMY, Vector2i(6, 1), units_node))
-
-	manager = BattleManager.new()
-	add_child(manager)
-	manager.setup(data, grid, units)
-
-func _spawn(data: GameDataLoader, id: StringName, team: Unit.Team, coords: Vector2i, parent: Node) -> Unit:
-	var u := Unit.new()
-	u.setup(data.get_unit(id), team, coords)
-	if team == Unit.Team.PLAYER:
-		u.facing = Vector2i(0, -1)
-	parent.add_child(u)
-	grid.place_unit(u, coords)
-	return u
-
-# ---------------------------------------------------------------- 回合与输入
-
-func _on_turn_started(unit: Unit) -> void:
-	reachable.clear()
-	pending_skill = null
-	if unit.team == Unit.Team.PLAYER and manager.auto_mode == BattleManager.AutoMode.MANUAL:
-		reachable = grid.get_reachable(unit, unit.get_move(grid))
+	manager.deploy_changed.connect(func(): queue_redraw())
+	manager.dialogue.connect(func(text): print("【剧情】%s" % text))
+	manager.round_started.connect(func(n): print("—— 第 %d 回合 ——" % n))
 	queue_redraw()
-	# 敌方固定 AI；我方在自动/半自动托管下也由评分 AI 驱动（策划文档 8.5）
-	var ai_driven := unit.team != Unit.Team.PLAYER or manager.auto_mode != BattleManager.AutoMode.MANUAL
-	if ai_driven:
-		await get_tree().create_timer(0.35).timeout
-		if is_instance_valid(manager) and manager.active_unit == unit and manager.state != BattleManager.State.BATTLE_END:
-			manager.run_ai()
+
+# ---------------------------------------------------------------- 输入
 
 func _unhandled_input(event: InputEvent) -> void:
 	if manager == null or manager.state == BattleManager.State.BATTLE_END:
 		return
+	if manager.state == BattleManager.State.DEPLOY:
+		_handle_deploy_input(event)
+		return
+	_handle_battle_input(event)
+
+# ---- 布阵 ----
+
+func _handle_deploy_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ENTER:
+		if manager.confirm_deploy():
+			print("开战！")
+		return
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var pos := get_local_mouse_position()
+		# 点候选条
+		var idx := _roster_index_at(pos)
+		if idx != -1:
+			selected_roster = idx if selected_roster != idx else -1
+			queue_redraw()
+			return
+		# 点部署区
+		var cell_coords := _pos_to_cell(pos)
+		if not manager.level.deploy_zone.has_point(cell_coords):
+			return
+		var cell := grid.get_cell(cell_coords)
+		if cell.occupant != null and manager.deployed.has(cell.occupant):
+			manager.undeploy_unit(cell.occupant)   # 点已上阵单位：撤下
+			return
+		if selected_roster != -1:
+			manager.deploy_unit(manager.level.roster[selected_roster], cell_coords)
+			selected_roster = -1
+
+func _roster_index_at(pos: Vector2) -> int:
+	for i in manager.level.roster.size():
+		var center := Vector2(-360.0, 24.0 + i * 44.0)
+		if pos.distance_to(center) <= 18.0:
+			return i
+	return -1
+
+func _pos_to_cell(pos: Vector2) -> Vector2i:
+	return Vector2i(floori(pos.x / CELL), floori(pos.y / CELL))
+
+# ---- 战斗 ----
+
+func _handle_battle_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
 		var u := manager.active_unit
 		if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE:
@@ -103,13 +113,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		# 1=手动 2=半自动 3=全自动（8.5）
 		manager.auto_mode = [BattleManager.AutoMode.MANUAL, BattleManager.AutoMode.SEMI, BattleManager.AutoMode.FULL][event.keycode - KEY_1]
 		print("托管模式：%s" % ["手动", "半自动", "全自动"][event.keycode - KEY_1])
-		# 若当前是我方回合且刚切到托管，立即接管
 		var u := manager.active_unit
 		if manager.auto_mode != BattleManager.AutoMode.MANUAL and u != null and u.team == Unit.Team.PLAYER:
 			manager.run_ai()
 		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_F:
-		# F：标记/取消鼠标下的敌人为集火目标（评分 +100，8.5）
 		var cell := grid.get_cell(_mouse_cell())
 		if cell != null and cell.occupant != null and cell.occupant.team == Unit.Team.ENEMY:
 			if manager.focus_target == cell.occupant:
@@ -189,14 +197,28 @@ func _after_player_action() -> void:
 	else:
 		queue_redraw()
 
+# ---------------------------------------------------------------- 回合与信号
+
+func _on_turn_started(unit: Unit) -> void:
+	reachable.clear()
+	pending_skill = null
+	if unit.team == Unit.Team.PLAYER and manager.auto_mode == BattleManager.AutoMode.MANUAL:
+		reachable = grid.get_reachable(unit, unit.get_move(grid))
+	queue_redraw()
+	# 敌方固定 AI；我方在自动/半自动托管下也由评分 AI 驱动（策划文档 8.5）
+	var ai_driven := unit.team != Unit.Team.PLAYER or manager.auto_mode != BattleManager.AutoMode.MANUAL
+	if ai_driven:
+		await get_tree().create_timer(0.35).timeout
+		if is_instance_valid(manager) and manager.active_unit == unit and manager.state != BattleManager.State.BATTLE_END:
+			manager.run_ai()
+
 func _on_battle_ended(winner: int) -> void:
 	reachable.clear()
-	print("战斗结束，胜方：%s" % ("我方" if winner == Unit.Team.PLAYER else "敌方"))
+	print("战斗结束，胜方：%s（第 %d 回合）" % [("我方" if winner == Unit.Team.PLAYER else "敌方"), manager.round_count])
 	queue_redraw()
 
 func _mouse_cell() -> Vector2i:
-	var local := get_local_mouse_position()
-	return Vector2i(floori(local.x / CELL), floori(local.y / CELL))
+	return _pos_to_cell(get_local_mouse_position())
 
 # ---------------------------------------------------------------- 占位表现
 
@@ -204,7 +226,10 @@ func _draw() -> void:
 	if grid == null:
 		return
 	_draw_terrain()
-	_draw_highlights()
+	if manager.state == BattleManager.State.DEPLOY:
+		_draw_deploy()
+	else:
+		_draw_highlights()
 	_draw_units()
 	_draw_preview_bar()
 
@@ -220,13 +245,43 @@ func _draw_terrain() -> void:
 			draw_line(rect.position + Vector2(rect.size.x, 0), rect.position + Vector2(0, rect.size.y), Color(0.2, 0.1, 0.05), 3.0)
 		draw_rect(rect, Color(0.15, 0.22, 0.25, 0.6), false, 1.0)   # 格子边界（墨色）
 
+## 布阵阶段：部署区高亮、敌方危险范围热力图（6.8）、左侧候选条
+func _draw_deploy() -> void:
+	var zone := manager.level.deploy_zone
+	# 危险范围热力图：敌方移动力+射程曼哈顿覆盖（近似，不含地形/阻挡，D28 注）
+	for e in manager.units:
+		if e.team != Unit.Team.ENEMY or not e.is_alive():
+			continue
+		var reach: int = e.data.move + e.data.range_max
+		for dy in range(-reach, reach + 1):
+			for dx in range(-reach, reach + 1):
+				if absi(dx) + absi(dy) > reach:
+					continue
+				var c: Vector2i = e.coords + Vector2i(dx, dy)
+				if grid.is_inside(c):
+					draw_rect(Rect2(Vector2(c) * CELL, Vector2(CELL, CELL)), Color(0.62, 0.17, 0.15, 0.13))
+	# 部署区
+	for y in range(zone.position.y, zone.end.y):
+		for x in range(zone.position.x, zone.end.x):
+			var rect := Rect2(Vector2(Vector2i(x, y)) * CELL, Vector2(CELL, CELL))
+			draw_rect(rect, Color(0.3, 0.55, 1.0, 0.18))
+			draw_rect(rect, Color(0.3, 0.55, 1.0, 0.5), false, 1.0)
+	# 候选条（稀有度配色；选中的加白圈）
+	for i in manager.level.roster.size():
+		var id: StringName = manager.level.roster[i]
+		var center := Vector2(-360.0, 24.0 + i * 44.0)
+		var ud := DataLoader.get_unit(id)
+		draw_circle(center, 16.0, QUALITY_COLORS.get(ud.quality, Color.GRAY))
+		draw_arc(center, 16.0, 0, TAU, 20, Color("263238"), 1.5)
+		if i == selected_roster:
+			draw_arc(center, 20.0, 0, TAU, 20, Color.WHITE, 2.5)
+
 func _draw_highlights() -> void:
 	for c: Vector2i in reachable:
 		draw_rect(Rect2(Vector2(c) * CELL, Vector2(CELL, CELL)), Color(0.3, 0.55, 1.0, 0.30))
 	var u := manager.active_unit
 	if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE:
 		if pending_skill != null:
-			# 待指向技能：亮出技能覆盖格，朱砂圈出可指向的敌人
 			for c in Targeting.cells_in_range(pending_skill, u, grid):
 				draw_rect(Rect2(Vector2(c) * CELL, Vector2(CELL, CELL)), Color(0.62, 0.17, 0.15, 0.25))
 			for e in manager.units:
@@ -242,21 +297,26 @@ func _draw_units() -> void:
 			continue
 		var center := Vector2(u.coords) * CELL + Vector2(CELL, CELL) / 2
 		var body := Color("3A7BD5") if u.team == Unit.Team.PLAYER else Color("9E2B25")
+		if u.team == Unit.Team.NPC_ALLY:
+			body = Color("4E7A3A")
+		if u.is_object:
+			draw_rect(Rect2(center - Vector2(10, 10), Vector2(20, 20)), Color("C9A86A"))
+			draw_rect(Rect2(center - Vector2(10, 10), Vector2(20, 20)), Color("263238"), false, 2.0)
+			continue
 		draw_circle(center, CELL * 0.32, body)
 		draw_arc(center, CELL * 0.32, 0, TAU, 24, Color("263238"), 2.0)
+		if u.is_elite:
+			draw_arc(center, CELL * 0.36, 0, TAU, 24, Color("C99B3F"), 2.5)   # 精英金圈
 		if u == manager.active_unit:
 			draw_arc(center, CELL * 0.40, 0, TAU, 24, Color.WHITE, 3.0)
 		if u == manager.focus_target:
 			draw_arc(center, CELL * 0.46, 0, TAU, 24, Color("C99B3F"), 3.0)   # 集火标记（赤金）
-		# 朝向指示
 		draw_line(center, center + Vector2(u.facing) * CELL * 0.30, Color("F5F1E8"), 3.0)
-		# HP 条（宣纸底 + 甲青/朱砂）与怒气细条
 		var bar := Rect2(center + Vector2(-CELL * 0.32, -CELL * 0.46), Vector2(CELL * 0.64, 5))
 		draw_rect(bar, Color("263238"))
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * float(u.hp) / float(u.data.hp), 5)), Color("8FBC4F"))
 		var rage_bar := Rect2(bar.position + Vector2(0, 6), Vector2(bar.size.x * float(u.rage) / float(Unit.MAX_RAGE), 3))
 		draw_rect(rage_bar, Color("C99B3F"))
-		# Buff 指示点：绿=增益，朱砂=减益（最多 3 个，占位表现）
 		var bi := 0
 		for b in u.buffs:
 			if bi >= 3:
@@ -267,7 +327,7 @@ func _draw_units() -> void:
 
 ## 行动预览条：棋盘右侧显示接下来 6 个行动单位（策划文档 6.4）
 func _draw_preview_bar() -> void:
-	if manager == null:
+	if manager == null or manager.state == BattleManager.State.DEPLOY:
 		return
 	var seq := manager.turn_order.preview(manager.units, 6)
 	var x := float(grid.size.x * CELL) + 18.0
