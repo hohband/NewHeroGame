@@ -42,3 +42,21 @@ func test_all_dead_returns_null() -> void:
 	var units: Array[Unit] = [a]
 	a.take_damage(99999)
 	assert_null(order.next_actor(units))
+
+func test_preview_matches_actual_sequence() -> void:
+	var a = autofree(UnitFactory.make_unit(100, 50, 100, Unit.Team.PLAYER, Vector2i.ZERO, &"a"))
+	var b = autofree(UnitFactory.make_unit(100, 50, 60, Unit.Team.ENEMY, Vector2i.ZERO, &"b"))
+	var c = autofree(UnitFactory.make_unit(100, 50, 45, Unit.Team.ENEMY, Vector2i.ZERO, &"c"))
+	var order := TurnOrder.new()
+	var units: Array[Unit] = [a, b, c]
+	var av_before: Array = units.map(func(u): return u.av)
+	var expected := order.preview(units, 6)
+	assert_eq(order.preview(units, 6), expected, "重复预览结果一致（非破坏性，决策日志 D17）")
+	for i in units.size():
+		assert_eq(units[i].av, av_before[i], "预览不改变真实 AV")
+	var actual: Array[Unit] = []
+	for i in range(6):
+		var u := order.next_actor(units)
+		actual.append(u)
+		u.reset_av()
+	assert_eq(actual, expected, "预览序列应与实际行动序列一致")

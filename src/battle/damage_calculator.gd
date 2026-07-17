@@ -30,7 +30,7 @@ static func compute(attacker: Unit, target: Unit, multiplier: float, grid: Grid,
 	result["height_mod"] = height_mod
 	var base := float(attacker.get_atk(grid)) * multiplier * 100.0 / float(100 + target.get_def(grid))
 	var amount := base * (1.0 + dir_mod + height_mod + aura_mod)
-	if rolls.roll() < float(attacker.data.crit):
+	if rolls.roll() < float(attacker.get_crit()):
 		result["crit"] = true
 		amount *= CRIT_MULT
 	if rolls.roll() < float(target.get_block()):

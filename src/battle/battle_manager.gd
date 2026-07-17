@@ -7,6 +7,7 @@ signal state_changed(new_state: int)
 signal turn_started(unit: Unit)
 signal turn_ended(unit: Unit)
 signal command_executed(command: Command, events: Array)
+signal tick_events(unit: Unit, events: Array)
 signal unit_died(unit: Unit)
 signal battle_ended(winner_team: int)
 
@@ -45,7 +46,7 @@ func submit_command(cmd: Command) -> Array:
 	var events := cmd.execute(self)
 	command_executed.emit(cmd, events)
 	if state != State.BATTLE_END:
-		change_state(State.IDLE if (active_unit != null and active_unit.team != Unit.Team.ENEMY) else State.AI_TURN)
+		change_state(State.IDLE if (active_unit != null and active_unit.team == Unit.Team.PLAYER) else State.AI_TURN)
 	return events
 
 # ---------------------------------------------------------------- 回合流转（CTB）
@@ -62,10 +63,34 @@ func advance_turn() -> void:
 	active_unit = turn_order.next_actor(units)
 	if active_unit == null:
 		return
+	# 回合开始统一 tick：Buff/DoT（策划文档 6.7）+ 地形效果（决策日志 D18）
+	var tick := active_unit.tick_turn_start()
+	tick.append_array(_terrain_tick(active_unit))
+	if not tick.is_empty():
+		tick_events.emit(active_unit, tick)
+	if not active_unit.is_alive():
+		advance_turn()   # DoT/地形致死，跳过行动
+		return
 	move_used = false
 	action_used = false
-	change_state(State.AI_TURN if active_unit.team == Unit.Team.ENEMY else State.IDLE)
+	change_state(State.AI_TURN if active_unit.team != Unit.Team.PLAYER else State.IDLE)
 	turn_started.emit(active_unit)
+
+## 地形回合开始效果：营帐回血 8% 最大生命，火堆灼烧 5% 最大生命（地形表 special，决策日志 D18）
+func _terrain_tick(unit: Unit) -> Array:
+	var events: Array = []
+	var cell := grid.get_cell(unit.coords)
+	if cell == null:
+		return events
+	match String(cell.terrain.terrain_id):
+		"camp":
+			var applied := unit.heal(roundi(float(unit.data.hp) * 0.08))
+			if applied > 0:
+				events.append({"type": "terrain_heal", "unit": unit, "terrain": &"camp", "amount": applied})
+		"fire":
+			var applied := unit.take_damage(roundi(float(unit.data.hp) * 0.05))
+			events.append({"type": "terrain_dot", "unit": unit, "terrain": &"fire", "amount": applied})
+	return events
 
 func finish_turn() -> void:
 	var u := active_unit

@@ -74,9 +74,9 @@ func _spawn(data: GameDataLoader, id: StringName, team: Unit.Team, coords: Vecto
 func _on_turn_started(unit: Unit) -> void:
 	reachable.clear()
 	if unit.team == Unit.Team.PLAYER:
-		reachable = grid.get_reachable(unit, unit.data.move)
+		reachable = grid.get_reachable(unit, unit.get_move(grid))
 	queue_redraw()
-	if unit.team == Unit.Team.ENEMY:
+	if unit.team != Unit.Team.PLAYER:
 		await get_tree().create_timer(0.35).timeout
 		if is_instance_valid(manager) and manager.active_unit == unit and manager.state != BattleManager.State.BATTLE_END:
 			manager.run_placeholder_ai()
@@ -87,6 +87,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
 		var u := manager.active_unit
 		if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE:
+			manager.submit_command(WaitCommand.new(u))   # 待机：防御+20%、怒气+15（表格9）
 			manager.finish_turn()
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -114,7 +115,7 @@ func _handle_cell_click(cell_coords: Vector2i) -> void:
 		path.remove_at(0)
 		manager.submit_command(MoveCommand.new(u, path))
 		manager.move_used = true
-		var remaining: int = u.data.move - int(reachable[cell_coords])
+		var remaining: int = u.get_move(grid) - int(reachable[cell_coords])
 		reachable = grid.get_reachable(u, remaining) if remaining > 0 else {}
 		_after_player_action()
 
@@ -141,6 +142,7 @@ func _draw() -> void:
 	_draw_terrain()
 	_draw_highlights()
 	_draw_units()
+	_draw_preview_bar()
 
 func _draw_terrain() -> void:
 	for coords: Vector2i in grid.cells:
@@ -181,3 +183,26 @@ func _draw_units() -> void:
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * float(u.hp) / float(u.data.hp), 5)), Color("8FBC4F"))
 		var rage_bar := Rect2(bar.position + Vector2(0, 6), Vector2(bar.size.x * float(u.rage) / float(Unit.MAX_RAGE), 3))
 		draw_rect(rage_bar, Color("C99B3F"))
+		# Buff 指示点：绿=增益，朱砂=减益（最多 3 个，占位表现）
+		var bi := 0
+		for b in u.buffs:
+			if bi >= 3:
+				break
+			var dot_color := Color("9E2B25") if b.is_debuff else Color("C99B3F")
+			draw_circle(center + Vector2(-CELL * 0.32 + bi * 9, -CELL * 0.54), 3.0, dot_color)
+			bi += 1
+
+## 行动预览条：棋盘右侧显示接下来 6 个行动单位（策划文档 6.4）
+func _draw_preview_bar() -> void:
+	if manager == null:
+		return
+	var seq := manager.turn_order.preview(manager.units, 6)
+	var x := float(grid.size.x * CELL) + 18.0
+	for i in seq.size():
+		var u := seq[i]
+		var center := Vector2(x + 14.0, 22.0 + i * 36.0)
+		var body := Color("3A7BD5") if u.team == Unit.Team.PLAYER else Color("9E2B25")
+		draw_circle(center, 12.0, body)
+		draw_arc(center, 12.0, 0, TAU, 20, Color("263238"), 1.5)
+		if i == 0:
+			draw_arc(center, 16.0, 0, TAU, 20, Color.WHITE, 2.5)

@@ -75,3 +75,77 @@ func test_unimplemented_effect_does_not_crash() -> void:
 	var events := EffectSystem.execute(skill, EffectContext.new())
 	assert_eq(events.size(), 0, "未实现效果：报错跳过，不崩溃、不产生事件")
 	assert_push_error("未实现的原子效果")
+
+# ---------------------------------------------------------------- Buff 系效果
+
+func _skill(id: StringName, effects: String) -> SkillData:
+	var s := SkillData.new()
+	s.skill_id = id
+	s.name = String(id)
+	s.effects = effects
+	return s
+
+func _buff_ctx() -> Dictionary:
+	var loader = autofree(GameDataLoader.new())
+	loader.load_all()
+	var grid = autofree(UnitFactory.make_grid(loader, Vector2i(4, 4)))
+	var a = autofree(UnitFactory.make_unit(100, 50, 50, Unit.Team.PLAYER, Vector2i(0, 0)))
+	var t = autofree(UnitFactory.make_unit(0, 50, 50, Unit.Team.ENEMY, Vector2i(1, 0)))
+	grid.place_unit(a, Vector2i(0, 0))
+	grid.place_unit(t, Vector2i(1, 0))
+	return {"grid": grid, "actor": a, "target": t}
+
+func test_effect_def_up() -> void:
+	var f: Dictionary = _buff_ctx()
+	var ctx := EffectContext.new(f["actor"], f["actor"], f["grid"], FixedRollSource.new())
+	var events := EffectSystem.execute(_skill(&"t", "def_up(0.3,1)"), ctx)
+	assert_eq(f["actor"].get_def(f["grid"]), 65, "50 × 1.3（0.3 = 30%，决策日志 D15）")
+	assert_eq(events[0]["type"], "buff")
+
+func test_effect_armor_break_is_debuff() -> void:
+	var f: Dictionary = _buff_ctx()
+	var ctx := EffectContext.new(f["actor"], f["target"], f["grid"], FixedRollSource.new())
+	EffectSystem.execute(_skill(&"t", "armor_break(0.3,2)"), ctx)
+	assert_eq(f["target"].get_def(f["grid"]), 35, "50 × 0.7")
+	assert_true(f["target"].buffs[0].is_debuff)
+	assert_eq(f["target"].buffs[0].duration, 2)
+
+func test_effect_poison_and_dispel() -> void:
+	var f: Dictionary = _buff_ctx()
+	var ctx := EffectContext.new(f["actor"], f["target"], f["grid"], FixedRollSource.new())
+	EffectSystem.execute(_skill(&"t", "poison(2)"), ctx)
+	assert_eq(f["target"].buffs.size(), 1)
+	assert_true(f["target"].buffs[0].is_debuff, "中毒为减益")
+	f["target"].tick_turn_start()
+	assert_eq(f["target"].hp, 475, "中毒每跳 5% 最大生命")
+	var events := EffectSystem.execute(_skill(&"t", "dispel(1)"), ctx)
+	assert_eq(events[0]["removed"], [&"poison"])
+	assert_eq(f["target"].buffs.size(), 0)
+
+func test_effect_heal_uses_caster_mgc() -> void:
+	var f: Dictionary = _buff_ctx()
+	f["actor"].data.mgc = 100
+	f["target"].hp = 100
+	var ctx := EffectContext.new(f["actor"], f["target"], f["grid"], FixedRollSource.new())
+	var events := EffectSystem.execute(_skill(&"t", "heal(1.5)"), ctx)
+	assert_eq(events[0]["amount"], 150, "治疗 = 谋略 100 × 1.5（决策日志 D19）")
+	assert_eq(f["target"].hp, 250)
+
+func test_effect_move_mod() -> void:
+	var f: Dictionary = _buff_ctx()
+	var ctx := EffectContext.new(f["actor"], f["actor"], f["grid"], FixedRollSource.new())
+	EffectSystem.execute(_skill(&"t", "move_mod(+2,1)"), ctx)
+	assert_eq(f["actor"].get_move(f["grid"]), 5)
+
+func test_random_buff_picks_first_option() -> void:
+	var f: Dictionary = _buff_ctx()
+	var ctx := EffectContext.new(f["actor"], f["actor"], f["grid"], FixedRollSource.new([0.0]))
+	EffectSystem.execute(_skill(&"t", "random_buff(def_up,0.4,2|counter,1)"), ctx)
+	assert_eq(f["actor"].get_def(f["grid"]), 70, "50 × 1.4，选中第一选项")
+
+func test_random_buff_unimplemented_option_safe() -> void:
+	var f: Dictionary = _buff_ctx()
+	var ctx := EffectContext.new(f["actor"], f["actor"], f["grid"], FixedRollSource.new([99.0]))
+	EffectSystem.execute(_skill(&"t", "random_buff(def_up,0.4,2|counter,1)"), ctx)
+	assert_eq(f["actor"].get_def(f["grid"]), 50, "选中未实现的 counter：报错跳过")
+	assert_push_error("未实现的原子效果")

@@ -24,6 +24,39 @@ func next_actor(units: Array[Unit]) -> Unit:
 func remove(unit: Unit) -> void:
 	_ready.erase(unit)
 
+## 非破坏性预演接下来 count 个行动单位（行动预览条，决策日志 D17）。
+## 假设各单位行动后 AV 重置为 1000÷速度；不改变任何真实状态。
+func preview(units: Array[Unit], count: int) -> Array[Unit]:
+	var out: Array[Unit] = []
+	var alive: Array[Unit] = []
+	var sim: Dictionary = {}   # Unit -> av 副本
+	for u in units:
+		if u.is_alive():
+			alive.append(u)
+			sim[u] = u.av
+	var queue: Array[Unit] = _ready.duplicate()
+	var guard := 0
+	while out.size() < count and guard < 10000:
+		guard += 1
+		if queue.is_empty():
+			if alive.is_empty():
+				break
+			var min_av := INF
+			for u in alive:
+				min_av = minf(min_av, sim[u])
+			for u in alive:
+				sim[u] = sim[u] - min_av
+			var zeroed: Array[Unit] = []
+			for u in alive:
+				if sim[u] <= 0.0001:
+					zeroed.append(u)
+			zeroed.sort_custom(_tie_less)
+			queue.append_array(zeroed)
+		var u := queue.pop_front() as Unit
+		sim[u] = 1000.0 / float(maxi(1, u.data.spd))   # 行动后重置
+		out.append(u)
+	return out
+
 func _tick(units: Array[Unit]) -> void:
 	var alive: Array[Unit] = []
 	for u in units:
@@ -40,12 +73,13 @@ func _tick(units: Array[Unit]) -> void:
 	for u in alive:
 		if u.av <= 0.0001:
 			zeroed.append(u)
-	zeroed.sort_custom(func(a: Unit, b: Unit) -> bool:
-		if a.data.spd != b.data.spd:
-			return a.data.spd > b.data.spd
-		if a.team != b.team:
-			return a.team < b.team
-		return String(a.data.unit_id) < String(b.data.unit_id)
-	)
+	zeroed.sort_custom(_tie_less)
 	for u in zeroed:
 		_ready.append(u)
+
+static func _tie_less(a: Unit, b: Unit) -> bool:
+	if a.data.spd != b.data.spd:
+		return a.data.spd > b.data.spd
+	if a.team != b.team:
+		return a.team < b.team
+	return String(a.data.unit_id) < String(b.data.unit_id)

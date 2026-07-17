@@ -3,6 +3,7 @@ extends Node
 ## 战斗单位逻辑：UnitData + 运行时状态。表现层另设（逻辑/表现分离，策划文档第十一章）。
 
 signal died(unit: Unit)
+signal buffs_changed(unit: Unit)
 
 enum Team { PLAYER, ENEMY, NPC_ALLY }
 
@@ -14,7 +15,8 @@ var coords: Vector2i
 var facing: Vector2i = Vector2i(0, 1)   # 朝向，用于背刺/侧击判定（决策日志 D5）
 var hp: int = 1
 var rage: int = 0
-var av: float = 0.0   # CTB 行动值（策划文档 6.4），由 TurnOrder 管理
+var av: float = 0.0                     # CTB 行动值（策划文档 6.4），由 TurnOrder 管理
+var buffs: Array[Buff] = []             # Buff/Debuff 统一管理（策划文档 6.7）
 
 func setup(p_data: UnitData, p_team: Team, p_coords: Vector2i) -> void:
 	data = p_data
@@ -24,7 +26,7 @@ func setup(p_data: UnitData, p_team: Team, p_coords: Vector2i) -> void:
 	reset_av()
 
 func reset_av() -> void:
-	av = 1000.0 / float(maxi(1, data.spd))
+	av = 1000.0 / float(get_spd())
 
 func is_alive() -> bool:
 	return hp > 0
@@ -32,28 +34,109 @@ func is_alive() -> bool:
 func display_name() -> String:
 	return data.name
 
-# ---------------------------------------------------------------- 战斗数值（含地形修正）
+# ---------------------------------------------------------------- 战斗数值
+# 攻击/防御/谋略/速度：基础 × (100 + 地形% + Buff%) / 100；闪避/格挡/暴击为概率点直接相加。
 
 func get_atk(grid: Grid) -> int:
-	return _with_terrain_mod(grid, data.atk, &"atk_mod")
+	return _with_mods(grid, data.atk, &"atk_mod", &"atk")
 
 func get_def(grid: Grid) -> int:
-	return _with_terrain_mod(grid, data.def, &"def_mod")
+	return _with_mods(grid, data.def, &"def_mod", &"def")
 
-## 闪避为概率点，地形修正直接相加（森林 +15）
+func get_mgc() -> int:
+	return _apply_percent(data.mgc, get_stat_mod(&"mgc"))
+
+func get_spd() -> int:
+	return maxi(1, _apply_percent(data.spd, get_stat_mod(&"spd")))
+
 func get_dodge(grid: Grid) -> int:
 	var cell := grid.get_cell(coords)
-	return data.dodge + (cell.terrain.dodge_mod if cell != null else 0)
+	return data.dodge + get_stat_mod(&"dodge") + (cell.terrain.dodge_mod if cell != null else 0)
 
 func get_block() -> int:
-	return data.block
+	return data.block + get_stat_mod(&"block")
 
-func _with_terrain_mod(grid: Grid, base: int, mod_field: StringName) -> int:
+func get_crit() -> int:
+	return data.crit + get_stat_mod(&"crit")
+
+## 移动力：基础 + Buff 修正（格）+ 地形规则（水面 -1，水军系免疫为后续扩展，决策日志 D18）
+func get_move(grid: Grid) -> int:
+	var mod := get_stat_mod(&"move")
 	var cell := grid.get_cell(coords)
-	var mod := 0
-	if cell != null:
-		mod = int(cell.terrain.get(mod_field))
+	if cell != null and cell.terrain.terrain_id == &"water":
+		mod -= 1
+	return maxi(0, data.move + mod)
+
+func _with_mods(grid: Grid, base: int, terrain_field: StringName, buff_field: StringName) -> int:
+	var mod := get_stat_mod(buff_field)
+	var cell := grid.get_cell(coords)
+	if cell != null and terrain_field != &"":
+		mod += int(cell.terrain.get(terrain_field))
+	return _apply_percent(base, mod)
+
+static func _apply_percent(base: int, mod: int) -> int:
 	return maxi(0, roundi(float(base) * float(100 + mod) / 100.0))
+
+# ---------------------------------------------------------------- Buff 管理（决策日志 D15）
+
+## 同 buff_id 重复施加：刷新持续时间，不叠层。
+func add_buff(buff: Buff) -> void:
+	for b in buffs:
+		if b.buff_id == buff.buff_id:
+			b.duration = maxi(b.duration, buff.duration)
+			buffs_changed.emit(self)
+			return
+	buffs.append(buff)
+	buffs_changed.emit(self)
+
+func get_stat_mod(field: StringName) -> int:
+	var total := 0
+	for b in buffs:
+		total += int(b.stat_mods.get(field, 0))
+	return total
+
+func has_status(status: StringName) -> bool:
+	for b in buffs:
+		if b.status == status:
+			return true
+	return false
+
+## 持有者回合开始统一 tick：持续效果（DoT）→ 回合数 -1 → 移除过期（策划文档 6.7）
+func tick_turn_start() -> Array:
+	var events: Array = []
+	var expired: Array[Buff] = []
+	for b in buffs.duplicate():
+		if not b.tick_effect.is_empty():
+			var amount := roundi(float(data.hp) * float(b.tick_effect.get("percent", 0)) / 100.0)
+			if b.tick_effect.get("kind") == "dot" and amount > 0:
+				var applied := take_damage(amount)
+				events.append({"type": "dot", "unit": self, "buff": b.buff_id, "amount": applied})
+		b.duration -= 1
+		if b.is_expired():
+			expired.append(b)
+	for b in expired:
+		buffs.erase(b)
+		events.append({"type": "buff_expired", "unit": self, "buff": b.buff_id})
+	if not expired.is_empty():
+		buffs_changed.emit(self)
+	return events
+
+## 驱散最多 count 个可驱散的减益，返回被驱散的 buff_id 列表
+func dispel_debuffs(count: int) -> Array:
+	var removed: Array[Buff] = []
+	for b in buffs:
+		if removed.size() >= count:
+			break
+		if b.is_debuff and b.dispellable:
+			removed.append(b)
+	for b in removed:
+		buffs.erase(b)
+	if not removed.is_empty():
+		buffs_changed.emit(self)
+	var ids: Array = []
+	for b in removed:
+		ids.append(b.buff_id)
+	return ids
 
 # ---------------------------------------------------------------- 生命与怒气
 
