@@ -57,7 +57,8 @@ func _build_main() -> void:
 	res.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(res)
 	for entry in [
-		["出 征（关卡）", _build_levels],
+		["出 征（主线/日常）", _build_levels],
+		["演武场（异步 PVP）", _build_arena],
 		["武 将（养成）", _build_roster],
 		["山 寨（经营）", _build_village],
 	]:
@@ -92,6 +93,14 @@ func _build_levels() -> void:
 	var vbox := _panel("选择关卡")
 	var chapter := int(SaveSystem.profile.progress.get("chapter", 1))
 	var cleared: Array = SaveSystem.profile.progress.get("cleared", [])
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(560, 420)
+	vbox.add_child(scroll)
+	var list := VBoxContainer.new()
+	scroll.add_child(list)
+	var story_label := Label.new()
+	story_label.text = "—— 主线 ——"
+	list.add_child(story_label)
 	for id in LevelRegistry.list_ids():
 		if id == "debug_01":
 			continue
@@ -105,9 +114,63 @@ func _build_levels() -> void:
 		b.pressed.connect(func():
 			GameState.current_level_id = level_id
 			get_tree().change_scene_to_file("res://scenes/battle/battle.tscn"))
-		vbox.add_child(b)
+		list.add_child(b)
+	var daily_label := Label.new()
+	daily_label.text = "—— 日常副本（刷资源，自动战斗主战场）——"
+	list.add_child(daily_label)
+	for id in LevelRegistry.list_daily_ids():
+		var l := LevelRegistry.get_level(id)
+		var b := Button.new()
+		b.text = "%s（推荐 Lv.%d）" % [l.name, l.recommended_level]
+		var level_id := id
+		b.pressed.connect(func():
+			GameState.current_level_id = level_id
+			get_tree().change_scene_to_file("res://scenes/battle/battle.tscn"))
+		list.add_child(b)
 	_back_row(vbox)
 	_focus_first()
+
+# ---------------------------------------------------------------- 演武场（异步 PVP，8.6）
+
+func _build_arena() -> void:
+	var defense := ArenaSystem.get_defense(SaveSystem.profile)
+	var template := String(defense.get("template", "steady"))
+	var vbox := _panel("演武场　攻方手动 vs 守方预设阵容 AI")
+	var team_label := Label.new()
+	var names: Array[String] = []
+	for id in defense.get("team", []):
+		names.append(DataLoader.get_unit(StringName(id)).name)
+	team_label.text = "守方阵容（等级前 4）：%s" % "、".join(names)
+	vbox.add_child(team_label)
+	var tpl_btn := Button.new()
+	tpl_btn.text = "守方策略模板：%s（点击切换）" % ArenaSystem.TEMPLATES[template]["name"]
+	tpl_btn.pressed.connect(func():
+		var idx := (ArenaSystem.TEMPLATE_ORDER.find(template) + 1) % ArenaSystem.TEMPLATE_ORDER.size()
+		ArenaSystem.set_template(SaveSystem.profile, ArenaSystem.TEMPLATE_ORDER[idx])
+		SaveSystem.save_game()
+		_build_arena())
+	vbox.add_child(tpl_btn)
+	var desc := Label.new()
+	desc.text = _template_desc(template)
+	vbox.add_child(desc)
+	var fight := Button.new()
+	fight.text = "开始切磋（挑战自己的守方阵容）"
+	fight.pressed.connect(func():
+		GameState.custom_level = ArenaSystem.build_arena_level(SaveSystem.profile, DataLoader)
+		get_tree().change_scene_to_file("res://scenes/battle/battle.tscn"))
+	vbox.add_child(fight)
+	_back_row(vbox)
+	_focus_first()
+
+func _template_desc(template: String) -> String:
+	match template:
+		"steady":
+			return "稳健防守：危险度×1.5、伤害期望×0.8、远离布阵区每格 −10（远程+治疗阵）"
+		"aggressive":
+			return "激进突进：伤害期望×1.3、击杀奖励×1.5、危险度×0.6（爆发阵）"
+		"protect_core":
+			return "保护核心：队友距核心 ≤2 格 +20、核心承伤风险 ×2（四保一阵）"
+	return ""
 
 # ---------------------------------------------------------------- 武将养成
 

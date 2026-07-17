@@ -29,6 +29,8 @@ var move_used := false
 var action_used := false
 var auto_mode: AutoMode = AutoMode.MANUAL
 var focus_target: Unit = null   # 集火目标：AI 评分 +100（8.5）
+var pvp_mods: Dictionary = {}   # PVP 守方策略模板修正（8.6，仅作用于敌方 AI）
+var pvp_core: Unit = null       # 「保护核心」模板的核心单位
 
 # ---- 关卡系统（LevelConfig，策划文档 6.8/6.9）----
 var level: LevelConfig = null
@@ -85,12 +87,15 @@ func setup_level(p_data: GameDataLoader, p_level: LevelConfig) -> void:
 			break
 		deploy_unit(rid, auto_cells.pop_front())
 
-## 按配置生成单位（elite/boss 标记）
+## 按配置生成单位（elite/boss 标记；spec["hero"] 存在时按养成数值生成，PVP 守方用）
 func spawn_from_spec(spec: Dictionary, default_team: Unit.Team) -> Unit:
 	var ud := data.get_unit(StringName(spec.get("unit", "")))
 	if ud == null:
 		push_error("BattleManager: 未知单位 '%s'" % spec.get("unit", ""))
 		return null
+	var hero: Hero = spec.get("hero")
+	if hero != null:
+		ud = Progression.compute_unit_data(hero, ud, data.progression)
 	var team := default_team
 	match String(spec.get("team", "")):
 		"player":
@@ -101,6 +106,7 @@ func spawn_from_spec(spec: Dictionary, default_team: Unit.Team) -> Unit:
 			team = Unit.Team.ENEMY
 	var u := Unit.new()
 	u.setup(ud, team, spec["coords"])
+	u.hero = hero
 	u.is_elite = bool(spec.get("elite", false))
 	if spec.get("boss", false):
 		u.is_elite = true

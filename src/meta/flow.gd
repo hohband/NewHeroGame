@@ -3,9 +3,9 @@ extends RefCounted
 ## 游戏流程：战斗结算 → 档案应用（核心循环：战斗 → 资源 → 升级 → 更高难度）。
 ## 奖励/经验/成就/章节进度/武将解锁的集中规则（决策日志 D32），全部可单元测试。
 
-## 通关经验：基础 30 + 每章 20（占位，D32）
+## 通关经验：基础 30 + 每章 20（占位，D32）；关卡可用 exp_override 覆盖（日常副本，D34）
 static func exp_reward(level: LevelConfig) -> int:
-	return 30 + 20 * level.chapter
+	return level.exp_override if level.exp_override > 0 else 30 + 20 * level.chapter
 
 ## 应用战斗结果到档案。deployed 为实际上阵单位（取其 hero 发放经验）。
 ## 返回摘要：{won, first_clear, rewards, achievements, exp_each, level_ups, unlocked, chapter_now}

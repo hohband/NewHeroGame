@@ -37,10 +37,15 @@ var cursor := Vector2i(0, 0)            # 手柄虚拟光标（Deck 适配，M2�
 
 func _ready() -> void:
 	position = ORIGIN
-	var level := LevelRegistry.get_level(GameState.current_level_id)
+	var level: LevelConfig = GameState.custom_level
+	GameState.custom_level = null
+	if level == null:
+		level = LevelRegistry.get_level(GameState.current_level_id)
 	manager = BattleManager.new()
 	add_child(manager)
 	manager.setup_level(DataLoader, level)
+	if level.pvp_template != "":
+		ArenaSystem.apply_template(manager, level.pvp_template)
 	if SaveSystem.profile != null:
 		manager.apply_profile_to_deployed(SaveSystem.profile)
 	grid = manager.grid

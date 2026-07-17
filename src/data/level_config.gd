@@ -5,8 +5,14 @@ extends Resource
 
 @export var id: String = ""
 @export var name: String = ""
+## 玩法模式（第九章）：story 主线 / daily 日常副本 / arena 演武场 / expedition 梁山远征
+@export var mode: String = "story"
 @export var chapter: int = 1
 @export var recommended_level: int = 1
+## 覆盖通关经验（0 = 按章节公式 30+20×章，日常副本用）
+@export var exp_override: int = 0
+## PVP 守方策略模板 id（arena 模式，8.6；空 = 无修正）
+@export var pvp_template: String = ""
 @export var grid_size: Vector2i = Vector2i(8, 8)
 ## 地形：{Vector2i: StringName(terrain_id)}，缺省 plain
 @export var terrain_map: Dictionary = {}

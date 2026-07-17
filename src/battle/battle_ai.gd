@@ -12,6 +12,12 @@ const CLOSE_BONUS := 2.0        # 向敌接近每格加分（占位，D26）
 ## 返回本回合的行动计划（0—2 个 Command：移动 + 行动）。
 static func decide(unit: Unit, battle: BattleManager) -> Array:
 	var weights: Dictionary = battle.data.get_ai_weights(unit.data.unit_class)
+	# PVP 守方策略模板：权重修正系数（8.6，仅敌方 AI）
+	if unit.team == Unit.Team.ENEMY and not battle.pvp_mods.is_empty():
+		weights = weights.duplicate()
+		for k in battle.pvp_mods.get("weights", {}):
+			if weights.has(k):
+				weights[k] = float(weights[k]) * float(battle.pvp_mods["weights"][k])
 	var candidates: Array = []
 	var reachable := battle.grid.get_reachable(unit, unit.get_move(battle.grid))
 	var dests: Array[Vector2i] = [unit.coords]
@@ -76,8 +82,27 @@ static func _score_attack(unit: Unit, target: Unit, dest: Vector2i, battle: Batt
 	s += _aura_coverage(unit, dest, battle) * 10.0 * float(w["aura_coverage"])
 	s += _position_bonus(unit, target, dest, battle) * float(w["position"])
 	s += _class_special(unit, target, dest, battle, est, 1)
+	s += _pvp_template_bonus(unit, dest, battle)
 	if battle.focus_target == target:
 		s += FOCUS_BONUS
+	return s
+
+## PVP 策略模板附加分（8.6）：「保护核心」队友距核心 ≤2 格 +20；「稳健防守」远离布阵区每格 −10
+static func _pvp_template_bonus(unit: Unit, dest: Vector2i, battle: BattleManager) -> float:
+	if unit.team != Unit.Team.ENEMY or battle.pvp_mods.is_empty():
+		return 0.0
+	var s := 0.0
+	if battle.pvp_core != null and unit != battle.pvp_core and unit.team == battle.pvp_core.team:
+		if _manhattan(dest, battle.pvp_core.coords) <= 2:
+			s += float(battle.pvp_mods.get("core_bonus", 20.0))
+	if battle.pvp_mods.has("away_from_deploy") and battle.level != null:
+		var zone := battle.level.deploy_zone
+		var dist := 9999
+		for y in range(zone.position.y, zone.end.y):
+			for x in range(zone.position.x, zone.end.x):
+				dist = mini(dist, _manhattan(dest, Vector2i(x, y)))
+		if dist < 9999:
+			s += float(battle.pvp_mods["away_from_deploy"]) * float(dist)
 	return s
 
 ## 技能评分：伤害型按普攻模型折算；治疗型按恢复模型；增益/控制按目标价值（占位 D26）
@@ -157,6 +182,7 @@ static func _target_value(target: Unit) -> float:
 	return base
 
 ## 危险度：落点在下回合敌方预估承伤 ÷ 自身最大HP ×（−30 基准）（表13）
+## 「保护核心」模板：核心单位承伤风险 ×2（8.6）
 static func _danger(unit: Unit, dest: Vector2i, battle: BattleManager) -> float:
 	var total := 0.0
 	for e in battle.units:
@@ -164,7 +190,10 @@ static func _danger(unit: Unit, dest: Vector2i, battle: BattleManager) -> float:
 			continue
 		if _manhattan(e.coords, dest) <= e.data.move + e.data.range_max:
 			total += DamageCalculator.estimate_at(e, unit, 1.0, battle.grid, e.coords)
-	return -(total / float(maxi(1, unit.data.hp))) * DANGER_BASE
+	var v := -(total / float(maxi(1, unit.data.hp))) * DANGER_BASE
+	if battle.pvp_core == unit:
+		v *= float(battle.pvp_mods.get("core_danger_mult", 1.0))
+	return v
 
 ## 光环/羁绊覆盖：落点 2 格内队友数（ aura 系统未落地前的代理，D26）
 static func _aura_coverage(unit: Unit, dest: Vector2i, battle: BattleManager) -> float:

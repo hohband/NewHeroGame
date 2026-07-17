@@ -7,6 +7,10 @@ static func list_ids() -> Array[String]:
 	return ["ch01_01", "ch01_02", "ch01_03", "ch01_04", "ch01_05",
 		"ch02_01", "ch02_02", "ch03_01", "debug_01"]
 
+## 日常副本 id（第九章：经验/金币/突破材料本，自动战斗主战场，决策日志 D34）
+static func list_daily_ids() -> Array[String]:
+	return ["daily_exp_1", "daily_exp_2", "daily_gold_1", "daily_gold_2", "daily_mat_1", "daily_mat_2"]
+
 static func get_level(id: String) -> LevelConfig:
 	match id:
 		"debug_01":
@@ -27,8 +31,59 @@ static func get_level(id: String) -> LevelConfig:
 			return _ch02_02()
 		"ch03_01":
 			return _ch03_01()
+		"daily_exp_1":
+			return _daily("daily_exp_1", "演武·新兵试炼", 5, 100, {"first_clear": {"gold": 200}, "regular": {"gold": 50}},
+				[{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)}, {"unit": &"xiangjun_spear", "coords": Vector2i(4, 1)},
+				{"unit": &"xiangjun_spear", "coords": Vector2i(5, 1)}, {"unit": &"xiangjun_shield", "coords": Vector2i(4, 2)}])
+		"daily_exp_2":
+			return _daily("daily_exp_2", "演武·精锐试炼", 12, 200, {"first_clear": {"gold": 400}, "regular": {"gold": 100}},
+				[{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)}, {"unit": &"xiangjun_spear", "coords": Vector2i(5, 1)},
+				{"unit": &"xiangjun_shield", "coords": Vector2i(4, 1)}, {"unit": &"xiangjun_shield", "coords": Vector2i(4, 2)},
+				{"unit": &"xiangjun_spear", "coords": Vector2i(3, 2)}, {"unit": &"xiangjun_spear", "coords": Vector2i(5, 2)}])
+		"daily_gold_1":
+			return _daily("daily_gold_1", "押镖·黄泥小道", 6, 0, {"first_clear": {"gold": 800}, "regular": {"gold": 600}},
+				[{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)}, {"unit": &"xiangjun_spear", "coords": Vector2i(4, 1)},
+				{"unit": &"xiangjun_shield", "coords": Vector2i(5, 2)}])
+		"daily_gold_2":
+			return _daily("daily_gold_2", "押镖·官道风云", 13, 0, {"first_clear": {"gold": 1500}, "regular": {"gold": 1200}},
+				[{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)}, {"unit": &"xiangjun_spear", "coords": Vector2i(5, 1)},
+				{"unit": &"xiangjun_shield", "coords": Vector2i(4, 1)}, {"unit": &"xiangjun_shield", "coords": Vector2i(4, 2)},
+				{"unit": &"lao_duguan", "coords": Vector2i(4, 0), "elite": true}])
+		"daily_mat_1":
+			return _daily("daily_mat_1", "奇袭·辎重营", 7, 0, {"first_clear": {"breakthrough_mat": 3}, "regular": {"breakthrough_mat": 2}},
+				[{"unit": &"xiangjun_shield", "coords": Vector2i(3, 1)}, {"unit": &"xiangjun_shield", "coords": Vector2i(5, 1)},
+				{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2)}])
+		"daily_mat_2":
+			return _daily("daily_mat_2", "奇袭·军械库", 14, 0, {"first_clear": {"breakthrough_mat": 6}, "regular": {"breakthrough_mat": 4}},
+				[{"unit": &"xiangjun_shield", "coords": Vector2i(3, 1)}, {"unit": &"xiangjun_shield", "coords": Vector2i(5, 1)},
+				{"unit": &"xiangjun_spear", "coords": Vector2i(3, 2)}, {"unit": &"xiangjun_spear", "coords": Vector2i(5, 2)},
+				{"unit": &"lao_duguan", "coords": Vector2i(4, 0), "elite": true}])
 	push_error("LevelRegistry: 未知关卡 '%s'" % id)
 	return null
+
+## 日常副本公共底（无章节门槛、无次数限制的刷资源关，D34）
+static func _daily(id: String, name: String, rec_level: int, exp_override: int, rewards: Dictionary, enemies: Array) -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = id
+	l.name = name
+	l.mode = "daily"
+	l.recommended_level = rec_level
+	l.grid_size = Vector2i(8, 8)
+	l.terrain_map = {Vector2i(2, 2): &"forest", Vector2i(5, 3): &"hill"}
+	l.height_map = {Vector2i(5, 3): 1}
+	l.win_condition = {"type": "WIPE_OUT"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.exp_override = exp_override
+	l.required_units = []
+	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"hua_rong",
+		&"li_kui", &"qin_ming", &"zhang_qing", &"hu_sanniang", &"dai_zong", &"shi_qian",
+		&"sun_erniang", &"an_daoquan", &"cao_zheng", &"jiao_ting", &"bao_xu", &"yu_baosi",
+		&"bai_sheng", &"tang_long", &"shi_yong", &"song_wan", &"du_qian", &"wang_dingliu"]
+	l.deploy_zone = Rect2i(0, 6, 8, 2)
+	l.max_deploy = 5
+	l.enemies.assign(enemies)
+	l.rewards = rewards
+	return l
 
 # ---------------------------------------------------------------- 第一章：教学序列（占位剧情：梁山初起，官军剿匪）
 
