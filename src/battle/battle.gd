@@ -365,6 +365,8 @@ func _show_result_panel(summary: Dictionary) -> void:
 	vbox.add_child(title)
 	if summary.get("won", false):
 		var lines: Array[String] = []
+		if String(summary.get("rank", "")) != "":
+			lines.append("评价：%s" % String(summary["rank"]))
 		var rewards: Dictionary = summary.get("rewards", {})
 		if not rewards.is_empty():
 			var parts: Array[String] = []

@@ -22,6 +22,15 @@ static func apply_battle_result(profile: PlayerProfile, level: LevelConfig, resu
 	}
 	if not summary["won"]:
 		return summary
+	summary["rank"] = result.get("rank", "")
+	# 挑战关武将解锁（花荣 S 评价/秦明通关等，D37）
+	var grant: Dictionary = level.unlock_grant
+	if not grant.is_empty():
+		var uid := StringName(grant.get("unit", ""))
+		var need_rank := String(grant.get("requires_rank", ""))
+		if uid != &"" and not profile.has_hero(uid) and (need_rank == "" or summary["rank"] == need_rank):
+			profile.add_hero(Hero.new(uid, loader.get_unit(uid).quality))
+			summary["unlocked"].append(uid)
 	# 奖励：首通给 first_clear，之后给 regular
 	var cleared: Array = profile.progress.get("cleared", [])
 	summary["first_clear"] = not cleared.has(level.id)

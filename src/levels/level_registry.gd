@@ -5,7 +5,11 @@ extends RefCounted
 ## 全部关卡 id（章节顺序，关卡选择界面与章节终关判定用）
 static func list_ids() -> Array[String]:
 	return ["ch01_01", "ch01_02", "ch01_03", "ch01_04", "ch01_05",
-		"ch02_01", "ch02_02", "ch03_01", "debug_01"]
+		"ch02_01", "ch02_02", "ch03_01", "ch04_01", "ch04_02", "debug_01"]
+
+## 挑战关 id（高难挑战解锁武将，5.3/挑战关「清风寨」「霹雳火」「东昌府」）
+static func list_challenge_ids() -> Array[String]:
+	return ["challenge_dongchang"]
 
 ## 日常副本 id（第九章：经验/金币/突破材料本，自动战斗主战场，决策日志 D34）
 static func list_daily_ids() -> Array[String]:
@@ -31,6 +35,12 @@ static func get_level(id: String) -> LevelConfig:
 			return _ch02_02()
 		"ch03_01":
 			return _ch03_01()
+		"ch04_01":
+			return _ch04_01()
+		"ch04_02":
+			return _ch04_02()
+		"challenge_dongchang":
+			return _challenge_dongchang()
 		"daily_exp_1":
 			return _daily("daily_exp_1", "演武·新兵试炼", 5, 100, {"first_clear": {"gold": 200}, "regular": {"gold": 50}},
 				[{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)}, {"unit": &"xiangjun_spear", "coords": Vector2i(4, 1)},
@@ -399,4 +409,125 @@ static func _ch03_01() -> LevelConfig:
 		{"id": "biaoshi", "name": "黄泥冈镖师", "exclusive_group": "shengchengang",
 			"requires": {"boss_dead": "yang_zhi_boss"}},
 	]
+	return l
+
+# ---------------------------------------------------------------- 第四章：大闹清风寨
+
+## 清风寨·花灯夜（S 评价解锁花荣，5.3 挑战关「清风寨」S评价）
+static func _ch04_01() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "ch04_01"
+	l.name = "清风寨·花灯夜"
+	l.chapter = 4
+	l.recommended_level = 14
+	l.grid_size = Vector2i(10, 8)
+	for y in range(8):
+		l.terrain_map[Vector2i(4, y)] = &"road"
+	for c in [Vector2i(2, 2), Vector2i(2, 3), Vector2i(7, 2), Vector2i(7, 3), Vector2i(3, 5), Vector2i(6, 5)]:
+		l.terrain_map[c] = &"camp"
+	for c in [Vector2i(1, 3), Vector2i(8, 3), Vector2i(1, 4), Vector2i(8, 4)]:
+		l.terrain_map[c] = &"forest"
+	l.win_condition = {"type": "WIPE_OUT"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = []
+	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"bai_sheng",
+		&"li_kui", &"xu_ning", &"shi_yong", &"song_wan", &"du_qian", &"an_daoquan"]
+	l.deploy_zone = Rect2i(0, 6, 10, 2)
+	l.max_deploy = 5
+	l.enemies = [
+		{"unit": &"lao_duguan", "coords": Vector2i(4, 1), "elite": true},   # 刘高亲兵头目（占位）
+		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 1)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(3, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(5, 2)},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "花灯夜，清风寨前火光冲天。刘高的亲兵把守住各条巷口。"},
+			{"type": "dialogue", "text": "【挑战】6 回合内无阵亡通关可获 S 评价，花荣闻讯来投。"}]},
+		{"id": "t2", "once": true, "on": {"type": "TURN", "turn": 2}, "actions": [
+			{"type": "dialogue", "text": "巷口两侧杀出伏兵！"},
+			{"type": "spawn", "units": [
+				{"unit": &"xiangjun_spear", "coords": Vector2i(0, 2), "team": "enemy"},
+				{"unit": &"xiangjun_spear", "coords": Vector2i(9, 2), "team": "enemy"},
+			]}]},
+	]
+	l.rank_rules = {"s_max_rounds": 6, "s_no_death": true}
+	l.unlock_grant = {"unit": &"hua_rong", "requires_rank": "S"}
+	l.rewards = {"first_clear": {"gold": 1000, "breakthrough_mat": 2}, "regular": {"gold": 250}}
+	return l
+
+## 霹雳火·秦明（通关解锁秦明，5.3 挑战关「霹雳火」通关）
+static func _ch04_02() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "ch04_02"
+	l.name = "霹雳火·秦明"
+	l.chapter = 4
+	l.recommended_level = 16
+	l.grid_size = Vector2i(10, 8)
+	for c in [Vector2i(3, 3), Vector2i(4, 3), Vector2i(5, 3), Vector2i(6, 3)]:
+		l.terrain_map[c] = &"road"
+	for c in [Vector2i(2, 2), Vector2i(7, 2), Vector2i(2, 4), Vector2i(7, 4)]:
+		l.terrain_map[c] = &"hill"
+	l.height_map = {Vector2i(2, 2): 1, Vector2i(7, 2): 1, Vector2i(2, 4): 1, Vector2i(7, 4): 1}
+	l.win_condition = {"type": "KILL_BOSS"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = []
+	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"bai_sheng",
+		&"li_kui", &"xu_ning", &"hua_rong", &"shi_yong", &"song_wan", &"du_qian", &"an_daoquan"]
+	l.deploy_zone = Rect2i(0, 6, 10, 2)
+	l.max_deploy = 5
+	l.enemies = [
+		{"unit": &"qin_ming", "coords": Vector2i(4, 1), "elite": true, "boss": true},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 1)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(3, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(5, 2)},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "秦明：「反贼休走，吃我一棒！」——霹雳火当先来搦战。"},
+			{"type": "dialogue", "text": "【挑战】击退秦明即胜。他攻高性烈，半血后愈发凶猛。"}]},
+		{"id": "t2", "once": true, "on": {"type": "HP_BELOW", "unit": "qin_ming", "ratio": 0.5}, "actions": [
+			{"type": "dialogue", "text": "秦明怒火攻心，狼牙棒势如霹雳！"},
+			{"type": "buff", "unit": "qin_ming", "field": &"atk", "value": 20, "duration": 99, "name": "霹雳怒火"}]},
+	]
+	l.unlock_grant = {"unit": &"qin_ming"}
+	l.rewards = {"first_clear": {"gold": 1200, "breakthrough_mat": 3}, "regular": {"gold": 300}}
+	return l
+
+## 挑战关·东昌府（通关解锁张清，5.3）
+static func _challenge_dongchang() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "challenge_dongchang"
+	l.name = "挑战·东昌府张清"
+	l.mode = "challenge"
+	l.chapter = 4
+	l.recommended_level = 18
+	l.grid_size = Vector2i(10, 8)
+	for c in [Vector2i(4, 1), Vector2i(4, 2), Vector2i(5, 1), Vector2i(5, 2)]:
+		l.terrain_map[c] = &"hill"
+	l.height_map = {Vector2i(4, 1): 1, Vector2i(4, 2): 1, Vector2i(5, 1): 1, Vector2i(5, 2): 1}
+	for c in [Vector2i(1, 4), Vector2i(2, 4), Vector2i(7, 4), Vector2i(8, 4)]:
+		l.terrain_map[c] = &"forest"
+	l.win_condition = {"type": "KILL_BOSS"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = []
+	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"bai_sheng",
+		&"li_kui", &"xu_ning", &"hua_rong", &"qin_ming", &"shi_yong", &"song_wan", &"du_qian", &"an_daoquan"]
+	l.deploy_zone = Rect2i(0, 6, 10, 2)
+	l.max_deploy = 5
+	l.enemies = [
+		{"unit": &"zhang_qing", "coords": Vector2i(4, 1), "elite": true, "boss": true},
+		{"unit": &"gong_wang", "coords": Vector2i(3, 2)},
+		{"unit": &"ding_desun", "coords": Vector2i(5, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(3, 3)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(5, 3)},
+	]
+	l.triggers = [{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+		{"type": "dialogue", "text": "没羽箭张清坐镇东昌府，飞石打人百发百中。"},
+		{"type": "dialogue", "text": "【挑战】龚旺、丁得孙两员副将护翼左右，先剪羽翼再擒主将。"}]}]
+	l.unlock_grant = {"unit": &"zhang_qing"}
+	l.rewards = {"first_clear": {"gold": 1500, "breakthrough_mat": 3}, "regular": {"gold": 350}}
 	return l

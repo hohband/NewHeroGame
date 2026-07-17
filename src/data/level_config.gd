@@ -48,6 +48,11 @@ extends Resource
 @export var triggers: Array[Dictionary] = []
 
 @export var rewards: Dictionary = {}
+## 评价规则（挑战关 S 评价，决策日志 D37）：{"s_max_rounds": N, "s_no_death": true}
+## 全满足 = S，其余通关 = A；空表不参与评价
+@export var rank_rules: Dictionary = {}
+## 通关/达成评价后的武将解锁：{"unit": unit_id, "requires_rank": "S"|""}（挑战关渠道，D37）
+@export var unlock_grant: Dictionary = {}
 ## 成就（7.5）：[{"id", "name", "requires": {...}, "exclusive_group"}]
 ## requires: {"path": 剧情路线标记} / {"no_player_kills": [unit_id...]} / {"boss_dead": unit_id}，可组合
 @export var achievements: Array[Dictionary] = []

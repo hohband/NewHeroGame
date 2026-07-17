@@ -128,6 +128,19 @@ func _build_levels() -> void:
 			GameState.current_level_id = level_id
 			get_tree().change_scene_to_file("res://scenes/battle/battle.tscn"))
 		list.add_child(b)
+	var ch_label := Label.new()
+	ch_label.text = "—— 挑战关（高难，解锁名将）——"
+	list.add_child(ch_label)
+	for id in LevelRegistry.list_challenge_ids():
+		var l := LevelRegistry.get_level(id)
+		var b := Button.new()
+		var owned := SaveSystem.profile.has_hero(StringName(l.unlock_grant.get("unit", "")))
+		b.text = "%s%s（推荐 Lv.%d）" % ["✓ " if owned else "", l.name, l.recommended_level]
+		var level_id := id
+		b.pressed.connect(func():
+			GameState.current_level_id = level_id
+			get_tree().change_scene_to_file("res://scenes/battle/battle.tscn"))
+		list.add_child(b)
 	_back_row(vbox)
 	_focus_first()
 
