@@ -11,6 +11,7 @@ extends Resource
 @export var quality: StringName = &"green"
 @export var weapon_enhance: int = 0   # 武器强化等级
 @export var weapon_refine: int = 0    # 武器精炼阶数
+@export var has_signature_weapon := false   # 专属武器已解锁（技能形态质变，4.2/4.4）
 @export var skill_levels: Dictionary = {}   # skill_id -> 等级（1 起）
 
 func _init(p_id: StringName = &"", p_quality: StringName = &"green") -> void:
@@ -24,7 +25,7 @@ func to_dict() -> Dictionary:
 	return {
 		"unit_id": String(unit_id), "level": level, "exp": exp, "star": star,
 		"quality": String(quality), "weapon_enhance": weapon_enhance,
-		"weapon_refine": weapon_refine,
+		"weapon_refine": weapon_refine, "has_signature_weapon": has_signature_weapon,
 		"skill_levels": skill_levels.duplicate(),
 	}
 
@@ -35,6 +36,7 @@ static func from_dict(d: Dictionary) -> Hero:
 	h.star = int(d.get("star", 1))
 	h.weapon_enhance = int(d.get("weapon_enhance", 0))
 	h.weapon_refine = int(d.get("weapon_refine", 0))
+	h.has_signature_weapon = bool(d.get("has_signature_weapon", false))
 	for k in d.get("skill_levels", {}):
 		h.skill_levels[StringName(k)] = int(d["skill_levels"][k])
 	return h

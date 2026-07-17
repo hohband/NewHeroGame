@@ -59,6 +59,7 @@ func _build_main() -> void:
 	for entry in [
 		["出 征（主线/日常）", _build_levels],
 		["演武场（异步 PVP）", _build_arena],
+		["梁山远征（爬塔）", _build_expedition],
 		["武 将（养成）", _build_roster],
 		["山 寨（经营）", _build_village],
 	]:
@@ -172,6 +173,23 @@ func _template_desc(template: String) -> String:
 			return "保护核心：队友距核心 ≤2 格 +20、核心承伤风险 ×2（四保一阵）"
 	return ""
 
+# ---------------------------------------------------------------- 梁山远征（Roguelike 爬塔，第九章）
+
+func _build_expedition() -> void:
+	var best := int(SaveSystem.profile.progress.get("expedition_best", 0))
+	var vbox := _panel("梁山远征　最佳纪录：%d 层" % best)
+	var tip := Label.new()
+	tip.text = "等级前 4 的好汉组队连闯 10 层，生命跨层继承、阵亡不进下赛季。\n每层胜利后三选一奖励，敌人逐层变强。"
+	vbox.add_child(tip)
+	var start := Button.new()
+	start.text = "开始新的远征"
+	start.pressed.connect(func():
+		GameState.expedition = ExpeditionSystem.new_run(SaveSystem.profile)
+		get_tree().change_scene_to_file("res://scenes/battle/battle.tscn"))
+	vbox.add_child(start)
+	_back_row(vbox)
+	_focus_first()
+
 # ---------------------------------------------------------------- 武将养成
 
 func _build_roster() -> void:
@@ -237,6 +255,16 @@ func _build_roster() -> void:
 			SaveSystem.save_game()
 			_build_roster())
 		box.add_child(sk_btn)
+		# 专属武器（4.2/4.4：技能形态质变）
+		var sw_btn := Button.new()
+		sw_btn.text = "专武✓" if h.has_signature_weapon else "专武(%d材料)" % SignatureWeapon.UNLOCK_MAT_COST
+		sw_btn.disabled = h.has_signature_weapon or not SignatureWeapon.can_unlock(h, SaveSystem.profile)
+		var hero_ref := h
+		sw_btn.pressed.connect(func():
+			SignatureWeapon.unlock(hero_ref, SaveSystem.profile)
+			SaveSystem.save_game()
+			_build_roster())
+		box.add_child(sw_btn)
 		list.add_child(box)
 	# 招募（聚义厅）
 	var any_recruit := false

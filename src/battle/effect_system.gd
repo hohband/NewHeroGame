@@ -82,7 +82,8 @@ static func scan_modifiers(effects: Array) -> Dictionary:
 ## 修正类效果前置扫描进 ctx.mods（决策日志 D21），不在序列中逐条执行。
 static func execute(skill: SkillData, ctx: EffectContext) -> Array:
 	var effects := parse_effects(skill.effects)
-	ctx.mods = scan_modifiers(effects)
+	# 合并外部预设的 mods（如专武形态质变 signature_morph）后再扫描（决策日志 D35）
+	ctx.mods.merge(scan_modifiers(effects), true)
 	# hit_rate(p)：整个技能对该目标按概率命中（白胜蒙汗药酒 80%，逐目标判定）
 	if ctx.mods.has("hit_rate") and ctx.rolls.roll() >= float(ctx.mods["hit_rate"]) * 100.0:
 		return [{"type": "miss", "source": ctx.actor, "target": ctx.target, "skill": skill.skill_id}]
@@ -112,7 +113,9 @@ static func _execute_one(skill: SkillData, eff: Dictionary, ctx: EffectContext) 
 		"def_up":
 			return [_apply_stat_buff(ctx, skill, &"def", _percent_value(args[0]), int(args[1]), false)]
 		"armor_break":
-			return [_apply_stat_buff(ctx, skill, &"def", -_percent_value(args[0]), int(args[1]), true)]
+			var events := [_apply_stat_buff(ctx, skill, &"def", -_percent_value(args[0]), int(args[1]), true)]
+			events.append_array(_splash_stat_buff(ctx, skill, &"def", -_percent_value(args[0]), int(args[1]), &"armor_break"))
+			return events
 		"dodge_up":
 			return [_apply_stat_buff(ctx, skill, &"dodge", _percent_value(args[0]), int(args[1]), false)]
 		"block_up":
@@ -309,6 +312,35 @@ static func _apply_stat_buff(ctx: EffectContext, skill: SkillData, field: String
 	b.source = ctx.actor
 	ctx.target.add_buff(b)
 	return {"type": "buff", "target": ctx.target, "buff": b.buff_id, "field": field, "value": value, "duration": duration}
+
+## 专武形态质变（决策日志 D35）：减益溅射到目标周围 splash_radius 格内的其他敌人
+static func _splash_stat_buff(ctx: EffectContext, skill: SkillData, field: StringName, value: int, duration: int, effect_name: StringName) -> Array:
+	var morph: Dictionary = ctx.mods.get("signature_morph", {})
+	if morph.is_empty() or StringName(morph.get("effect", "")) != effect_name:
+		return []
+	var radius := int(morph.get("splash_radius", 0))
+	if radius <= 0:
+		return []
+	var events: Array = []
+	for c in ctx.grid.cells.values():
+		var u: Unit = (c as GridCell).occupant
+		if u == null or u == ctx.target or not u.is_alive() or u.is_object:
+			continue
+		if (u.team == Unit.Team.ENEMY) == (ctx.actor.team == Unit.Team.ENEMY):
+			continue
+		if _manhattan(u.coords, ctx.target.coords) > radius:
+			continue
+		var b := Buff.new()
+		b.buff_id = StringName("%s_%s" % [skill.skill_id, field])
+		b.name = skill.name
+		b.stat_mods = {field: value}
+		b.duration = duration
+		b.is_debuff = true
+		b.source = ctx.actor
+		u.add_buff(b)
+		events.append({"type": "buff", "target": u, "buff": b.buff_id, "field": field, "value": value,
+			"duration": duration, "splash": true})
+	return events
 
 static func _apply_dot(ctx: EffectContext, skill: SkillData, dot_id: StringName, duration: int) -> Dictionary:
 	var b := Buff.new()

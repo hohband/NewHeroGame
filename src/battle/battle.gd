@@ -37,10 +37,15 @@ var cursor := Vector2i(0, 0)            # 手柄虚拟光标（Deck 适配，M2�
 
 func _ready() -> void:
 	position = ORIGIN
-	var level: LevelConfig = GameState.custom_level
-	GameState.custom_level = null
-	if level == null:
-		level = LevelRegistry.get_level(GameState.current_level_id)
+	var level: LevelConfig
+	if not GameState.expedition.is_empty():
+		# 梁山远征：按层生成关卡
+		level = ExpeditionSystem.build_floor(GameState.expedition, DataLoader)
+	else:
+		level = GameState.custom_level
+		GameState.custom_level = null
+		if level == null:
+			level = LevelRegistry.get_level(GameState.current_level_id)
 	manager = BattleManager.new()
 	add_child(manager)
 	manager.setup_level(DataLoader, level)
@@ -57,7 +62,20 @@ func _ready() -> void:
 	manager.deploy_changed.connect(func(): queue_redraw())
 	manager.dialogue.connect(func(text): print("【剧情】%s" % text))
 	manager.round_started.connect(func(n): print("—— 第 %d 回合 ——" % n))
+	if not GameState.expedition.is_empty():
+		_expedition_deploy()   # 远征：跳过手动布阵，自动上阵并继承状态
 	queue_redraw()
+
+## 远征布阵：存活队员自动落位（生命跨层继承 + 远征增益）
+func _expedition_deploy() -> void:
+	var cells := manager._free_deploy_cells()
+	for t in GameState.expedition["team"]:
+		if not t["alive"] or cells.is_empty():
+			continue
+		var id: StringName = t["unit_id"]
+		manager.deploy_unit(id, cells.pop_front(), SaveSystem.profile.get_hero(id))
+	ExpeditionSystem.apply_carryover(manager, GameState.expedition)
+	manager.confirm_deploy()
 
 # ---------------------------------------------------------------- 输入
 
@@ -319,6 +337,9 @@ func _on_battle_ended(winner: int) -> void:
 	if _result_shown:
 		return
 	_result_shown = true
+	if not GameState.expedition.is_empty():
+		_expedition_end(winner)
+		return
 	var result := manager.compute_result(winner)
 	if SaveSystem.profile != null:
 		GameState.last_result = Flow.apply_battle_result(SaveSystem.profile, manager.level, result, manager.deployed, DataLoader)
@@ -368,6 +389,71 @@ func _show_result_panel(summary: Dictionary) -> void:
 		var hint := Label.new()
 		hint.text = "整顿兵马，再接再厉。"
 		vbox.add_child(hint)
+	var btn := Button.new()
+	btn.text = "返回山寨"
+	btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/hub/hub.tscn"))
+	vbox.add_child(btn)
+	layer.add_child(panel)
+
+# ---------------------------------------------------------------- 梁山远征流程
+
+func _expedition_end(winner: int) -> void:
+	ExpeditionSystem.record_floor_result(manager, GameState.expedition)
+	if winner == Unit.Team.PLAYER:
+		GameState.expedition["floor"] = int(GameState.expedition["floor"]) + 1
+		if int(GameState.expedition["floor"]) > ExpeditionSystem.MAX_FLOOR:
+			_expedition_finish(true)
+		else:
+			_show_reward_choice()
+	else:
+		_expedition_finish(false)
+
+## 层间三选一奖励
+func _show_reward_choice() -> void:
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	var panel := PanelContainer.new()
+	panel.position = Vector2(430, 200)
+	panel.custom_minimum_size = Vector2(420, 0)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	panel.add_child(vbox)
+	var title := Label.new()
+	title.text = "—— 第 %d 层告破！择一奖励 ——" % (int(GameState.expedition["floor"]) - 1)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+	for r in ExpeditionSystem.FLOOR_REWARDS:
+		var b := Button.new()
+		b.text = String(r["name"])
+		var rid := String(r["id"])
+		b.pressed.connect(func():
+			ExpeditionSystem.apply_reward_choice(GameState.expedition, rid)
+			SaveSystem.save_game()
+			get_tree().reload_current_scene())
+		vbox.add_child(b)
+	layer.add_child(panel)
+
+func _expedition_finish(completed: bool) -> void:
+	var summary := ExpeditionSystem.finish_run(SaveSystem.profile, GameState.expedition)
+	GameState.expedition = {}
+	SaveSystem.save_game()
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	var panel := PanelContainer.new()
+	panel.position = Vector2(430, 200)
+	panel.custom_minimum_size = Vector2(420, 0)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	panel.add_child(vbox)
+	var title := Label.new()
+	title.text = "—— 远征成功！通关 10 层 ——" if completed else "—— 远征结束 ——"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+	var info := Label.new()
+	info.text = "推进 %d 层｜获得金币 ×%d、突破材料 ×%d" % [
+		int(summary["floors_cleared"]), int(summary["gold"]), int(summary["breakthrough_mat"])]
+	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(info)
 	var btn := Button.new()
 	btn.text = "返回山寨"
 	btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/hub/hub.tscn"))

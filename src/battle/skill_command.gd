@@ -26,13 +26,17 @@ func execute(battle: BattleManager) -> Array:
 	actor.gain_rage(-skill.rage_cost)
 	var events: Array = []
 	var killed_any := false
-	# 技能等级效果倍率（养成系统：无档案为 1.0）
+	# 技能等级效果倍率（养成系统：无档案为 1.0）与专武形态质变（D35）
 	var effect_mult := 1.0
+	var morph: Dictionary = {}
 	if actor.hero != null:
 		effect_mult = Progression.skill_effect_mult(actor.hero, skill.skill_id, battle.data.progression)
+		morph = SignatureWeapon.morph_for(actor.hero, skill.skill_id)
 	for t in targets:
 		var ctx := EffectContext.new(actor, t, battle.grid, battle.rolls, battle)
 		ctx.effect_mult = effect_mult
+		if not morph.is_empty():
+			ctx.mods["signature_morph"] = morph
 		events.append_array(EffectSystem.execute(skill, ctx))
 		if not t.is_alive():
 			killed_any = true

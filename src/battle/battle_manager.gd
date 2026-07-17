@@ -96,6 +96,15 @@ func spawn_from_spec(spec: Dictionary, default_team: Unit.Team) -> Unit:
 	var hero: Hero = spec.get("hero")
 	if hero != null:
 		ud = Progression.compute_unit_data(hero, ud, data.progression)
+	if spec.has("stat_mult"):
+		# 敌人属性缩放（远征层数/难度档位，D35）
+		var mult := float(spec["stat_mult"])
+		ud = ud.duplicate()
+		ud.hp = roundi(float(ud.hp) * mult)
+		ud.atk = roundi(float(ud.atk) * mult)
+		ud.def = roundi(float(ud.def) * mult)
+		ud.mgc = roundi(float(ud.mgc) * mult)
+		ud.spd = roundi(float(ud.spd) * mult)
 	var team := default_team
 	match String(spec.get("team", "")):
 		"player":
