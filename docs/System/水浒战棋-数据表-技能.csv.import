@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bypn0yycqj8ll"
+
+[deps]
+
+files=["res://docs/System/水浒战棋-数据表-技能.name.translation", "res://docs/System/水浒战棋-数据表-技能.owner.translation", "res://docs/System/水浒战棋-数据表-技能.type.translation", "res://docs/System/水浒战棋-数据表-技能.trigger.translation", "res://docs/System/水浒战棋-数据表-技能.range.translation", "res://docs/System/水浒战棋-数据表-技能.range.translation", "res://docs/System/水浒战棋-数据表-技能.range.translation", "res://docs/System/水浒战棋-数据表-技能.target.translation", "res://docs/System/水浒战棋-数据表-技能.cooldown.translation", "res://docs/System/水浒战棋-数据表-技能.rage.translation", "res://docs/System/水浒战棋-数据表-技能.effects.translation", "res://docs/System/水浒战棋-数据表-技能.desc.translation"]
+
+source_file="res://docs/System/水浒战棋-数据表-技能.csv"
+dest_files=["res://docs/System/水浒战棋-数据表-技能.name.translation", "res://docs/System/水浒战棋-数据表-技能.owner.translation", "res://docs/System/水浒战棋-数据表-技能.type.translation", "res://docs/System/水浒战棋-数据表-技能.trigger.translation", "res://docs/System/水浒战棋-数据表-技能.range.translation", "res://docs/System/水浒战棋-数据表-技能.range.translation", "res://docs/System/水浒战棋-数据表-技能.range.translation", "res://docs/System/水浒战棋-数据表-技能.target.translation", "res://docs/System/水浒战棋-数据表-技能.cooldown.translation", "res://docs/System/水浒战棋-数据表-技能.rage.translation", "res://docs/System/水浒战棋-数据表-技能.effects.translation", "res://docs/System/水浒战棋-数据表-技能.desc.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

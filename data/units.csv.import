@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://dxxardc2pri5r"
+
+[deps]
+
+files=["res://data/units.name.translation", "res://data/units.nickname.translation", "res://data/units.star.translation", "res://data/units.quality.translation", "res://data/units.class.translation", "res://data/units.hp.translation", "res://data/units.atk.translation", "res://data/units.def.translation", "res://data/units.mgc.translation", "res://data/units.spd.translation", "res://data/units.crit.translation", "res://data/units.dodge.translation", "res://data/units.block.translation", "res://data/units.move.translation", "res://data/units.range.translation", "res://data/units.range.translation", "res://data/units.weapon.translation", "res://data/units.skill.translation", "res://data/units.bonds.translation", "res://data/units.unlock.translation"]
+
+source_file="res://data/units.csv"
+dest_files=["res://data/units.name.translation", "res://data/units.nickname.translation", "res://data/units.star.translation", "res://data/units.quality.translation", "res://data/units.class.translation", "res://data/units.hp.translation", "res://data/units.atk.translation", "res://data/units.def.translation", "res://data/units.mgc.translation", "res://data/units.spd.translation", "res://data/units.crit.translation", "res://data/units.dodge.translation", "res://data/units.block.translation", "res://data/units.move.translation", "res://data/units.range.translation", "res://data/units.range.translation", "res://data/units.weapon.translation", "res://data/units.skill.translation", "res://data/units.bonds.translation", "res://data/units.unlock.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

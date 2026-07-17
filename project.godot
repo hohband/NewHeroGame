@@ -1,0 +1,30 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all that obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="水浒战棋"
+config/description="替天行道 · 聚义梁山 —— 战棋（SRPG）＋ 卡牌养成"
+config/features=PackedStringArray("4.7")
+run/main_scene="res://scenes/battle/battle.tscn"
+
+[autoload]
+
+DataLoader="*res://src/autoload/data_loader.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
