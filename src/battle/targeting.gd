@@ -23,13 +23,16 @@ static func resolve_from(skill: SkillData, caster: Unit, aim: Vector2i, grid: Gr
 				continue
 			out.append(u)
 	var mods := EffectSystem.scan_modifiers(EffectSystem.parse_effects(skill.effects))
-	# target_rule(lowest_hp)：只保留血量最低者（百步穿杨）
+	# target_rule(lowest_hp)：只保留血量最低者（百步穿杨）；target_rule(random)：随机 1 个（老都管鼓劲）
 	if mods.get("target_rule", "") == "lowest_hp" and out.size() > 1:
 		var lowest: Unit = out[0]
 		for u in out:
 			if u.hp < lowest.hp:
 				lowest = u
 		out = [lowest]
+	elif mods.get("target_rule", "") == "random" and out.size() > 1:
+		var idx := int(clampf(rolls.roll() / 100.0, 0.0, 0.9999) * out.size())
+		out = [out[idx]]
 	# random_target(n)：范围内随机 n 个目标（飞石连打）
 	if mods.has("random_target") and out.size() > int(mods["random_target"]):
 		var pool := out.duplicate()

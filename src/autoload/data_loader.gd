@@ -5,6 +5,7 @@ extends Node
 ## 测试与命令行工具请自行实例化（GameDataLoader.new() + load_all()），不依赖 autoload。
 
 const UNITS_CSV := "res://data/units.csv"
+const ENEMIES_CSV := "res://data/enemies.csv"
 const SKILLS_CSV := "res://data/skills.csv"
 const TERRAINS_CSV := "res://data/terrains.csv"
 const AI_WEIGHTS_CSV := "res://data/ai_weights.csv"
@@ -39,6 +40,13 @@ func load_all() -> void:
 	terrains = _load_terrains(TERRAINS_CSV)
 	skills = _load_skills(SKILLS_CSV)
 	units = _load_units(UNITS_CSV)
+	# 敌方/剧情单位（enemies.csv）并入同一查询空间，id 不得与武将表冲突
+	var enemy_units := _load_units(ENEMIES_CSV)
+	for id in enemy_units:
+		if units.has(id):
+			push_error("DataLoader: enemies.csv 与武将表 id 冲突 '%s'" % id)
+		else:
+			units[id] = enemy_units[id]
 	ai_weights = _load_ai_weights(AI_WEIGHTS_CSV)
 	progression = _load_key_values(PROGRESSION_CSV)
 	reserved = _load_reserved(RESERVED_TXT)
@@ -120,6 +128,7 @@ static func _load_units(path: String) -> Dictionary:
 		u.skill_signature = StringName(row.get("skill_signature", ""))
 		u.bonds = parse_bonds(row.get("bonds", ""))
 		u.unlock = row.get("unlock", "")
+		u.traits = _parse_string_list(row.get("traits", ""))
 		if out.has(u.unit_id):
 			push_error("DataLoader: 重复 unit_id '%s'" % u.unit_id)
 		out[u.unit_id] = u
@@ -199,6 +208,14 @@ static func _load_reserved(path: String) -> Dictionary:
 		out[StringName(line)] = true
 	return out
 
+static func _parse_string_list(raw: String) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for part in raw.split(";", false):
+		var s := part.strip_edges()
+		if not s.is_empty():
+			out.append(StringName(s))
+	return out
+
 ## 羁绊格式：目标unit_id或预留名|羁绊名;…（数据表说明第一节）
 static func parse_bonds(raw: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
@@ -224,7 +241,7 @@ func validate() -> Array[String]:
 			errors.append("武将 %s：非法 class '%s'" % [id, u.unit_class])
 		if not ai_weights.has(u.unit_class):
 			errors.append("武将 %s：职业 %s 缺少 AI 权重行（ai_weights.csv）" % [id, u.unit_class])
-		if not skills.has(u.skill_signature):
+		if u.skill_signature != &"" and not skills.has(u.skill_signature):
 			errors.append("武将 %s：skill_signature '%s' 不在技能表" % [id, u.skill_signature])
 		for b in u.bonds:
 			var t: StringName = b["target"]

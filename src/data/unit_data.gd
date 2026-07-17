@@ -25,3 +25,5 @@ extends Resource
 ## 羁绊列表：[{ "target": StringName, "name": String }]
 @export var bonds: Array[Dictionary] = []
 @export var unlock: String
+## 特性标记（enemies.csv 的 traits 列；如 alert 警觉——首次睡眠减免，决策日志 D31）
+@export var traits: Array[StringName] = []

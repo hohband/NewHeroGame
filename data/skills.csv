@@ -25,3 +25,5 @@ act_duming,赌命,shi_yong,active,manual,self,0,0,self,3,0,"random_buff(def_up,0
 act_tiebi,铁壁,song_wan,active,manual,adjacent,0,1,ally,3,0,"guard(1);def_up(0.3,1)",替相邻友军格挡远程攻击，自身防御+30%一回合
 act_mozhetian,摸着天,du_qian,active,manual,self,0,0,self,3,0,"block_up(0.3,2);counter(1)",格挡率+30%两回合并获得反击状态
 act_huoshan,活闪,wang_dingliu,active,manual,self,0,0,self,2,0,"dodge_up(0.5,1);move_mod(+1,1)",本回合闪避+50%、移动力+1，用于抢点开视野
+act_yangjia,杨家枪法,yang_zhi_boss,active,manual,line,1,2,enemy,2,0,phys_dmg(1.4),直线2格枪法
+act_guli,鼓劲,lao_duguan,active,manual,all,0,99,ally,0,0,"buff(atk,0.2,1);target_rule(random)",每回合为随机1名友军施加攻+20%

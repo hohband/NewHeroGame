@@ -324,6 +324,10 @@ static func _apply_dot(ctx: EffectContext, skill: SkillData, dot_id: StringName,
 ## 控制状态（决策日志 D22/D27）：stun/paralyze/sleep = 跳过行动；sleep 受击解除；bind = 不可移动；
 ## guard = 替相邻友军挡远程攻击；counter = 受击反击
 static func _apply_status(ctx: EffectContext, skill: SkillData, status: StringName, duration: int) -> Dictionary:
+	# 警觉特性：首次睡眠减免为 1 回合（杨志，策划文档 7.3、决策日志 D31）
+	if status == &"sleep" and ctx.target.data.traits.has(&"alert") and not ctx.target.alert_triggered:
+		ctx.target.alert_triggered = true
+		duration = mini(duration, 1)
 	var b := Buff.new()
 	b.buff_id = status
 	b.name = skill.name

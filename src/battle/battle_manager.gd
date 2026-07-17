@@ -40,6 +40,8 @@ var deployed: Array[Unit] = []          # 布阵阶段上阵的我方单位
 var _round_actors: Dictionary = {}      # 本轮已行动单位（回合 = 全体各行动一次，决策日志 D28）
 var _triggers: Array = []               # 触发器（含 fired 标记的运行副本）
 var _escort_reached := false
+var achievement_paths: Dictionary = {}  # 剧情路线标记（如 drugged_wine，成就判定用，决策日志 D31）
+var _kill_teams: Dictionary = {}        # unit_id -> 击杀者所在 Team（成就「不击杀」判定）
 
 func setup(p_data: GameDataLoader, p_grid: Grid, p_units: Array[Unit]) -> void:
 	data = p_data
@@ -216,6 +218,8 @@ func _fan_out_trigger_events(cmd: Command, events: Array) -> void:
 				var t := e.get("target") as Unit
 				if t != null and t.is_alive():
 					_check_triggers({"type": "UNIT_DAMAGED", "unit": t})
+				if t != null and bool(e.get("died", false)) and e.get("source") != null:
+					_kill_teams[t.data.unit_id] = (e["source"] as Unit).team
 
 func _check_escort_arrival(u: Unit) -> void:
 	if level == null or String(level.win_condition.get("type")) != "ESCORT":
@@ -233,6 +237,8 @@ func start_battle() -> void:
 	var bond_events := BondSystem.apply_bonds(units, data.progression)
 	if not bond_events.is_empty():
 		tick_events.emit(null, bond_events)
+	# 开局触发器（T1 剧情等）
+	_check_triggers({"type": "START"})
 	advance_turn()
 
 func advance_turn() -> void:
@@ -263,10 +269,35 @@ func advance_turn() -> void:
 		return
 	if not tick.is_empty():
 		tick_events.emit(active_unit, tick)
+	# 引导夺取完成（上回合开始引导，本回合开始时收讫，策划文档 7.3）
+	if active_unit.channeling != null:
+		var channel_events := _complete_collect(active_unit)
+		tick_events.emit(active_unit, channel_events)
 	move_used = false
 	action_used = false
 	change_state(State.AI_TURN if active_unit.team != Unit.Team.PLAYER else State.IDLE)
 	turn_started.emit(active_unit)
+
+## 开始引导夺取（InteractCommand 调用）：需相邻、消耗本回合行动
+func can_channel(unit: Unit, obj: Unit) -> bool:
+	return unit != null and obj != null and obj.is_object and obj.is_alive() \
+		and unit.channeling == null and not unit.is_object \
+		and absi(unit.coords.x - obj.coords.x) + absi(unit.coords.y - obj.coords.y) == 1
+
+func _complete_collect(unit: Unit) -> Array:
+	var obj := unit.channeling
+	unit.channeling = null
+	if obj == null or not obj.is_alive():
+		return [{"type": "collect_failed", "unit": unit}]
+	var obj_id := String(obj.data.unit_id).trim_prefix("obj_")
+	var cell := grid.get_cell(obj.coords)
+	if cell != null and cell.occupant == obj:
+		cell.occupant = null
+	units.erase(obj)
+	obj.queue_free()
+	collect(obj_id)
+	return [{"type": "collect", "unit": unit, "object": obj_id,
+		"count": int(collect_counts[obj_id])}]
 
 ## 地形回合开始效果：营帐回血 8% 最大生命，火堆灼烧 5% 最大生命（地形表 special，决策日志 D18）
 func _terrain_tick(unit: Unit) -> Array:
@@ -386,6 +417,41 @@ func check_winner() -> int:
 func collect(object_id: String) -> void:
 	collect_counts[object_id] = int(collect_counts.get(object_id, 0)) + 1
 
+# ---------------------------------------------------------------- 结算与成就（策划文档 7.5、决策日志 D31）
+
+## 战斗结算：胜负、奖励、成就。成就互斥：同 exclusive_group 只取先列出者。
+func compute_result(winner: int) -> Dictionary:
+	var result := {
+		"winner": winner,
+		"won": winner == Unit.Team.PLAYER,
+		"rounds": round_count,
+		"rewards": {},
+		"achievements": [],
+	}
+	if level == null or winner != Unit.Team.PLAYER:
+		return result
+	result["rewards"] = level.rewards.duplicate(true)
+	var earned_groups: Array = []
+	for ach in level.achievements:
+		if _achievement_met(ach) and not earned_groups.has(String(ach.get("exclusive_group", ""))):
+			earned_groups.append(String(ach.get("exclusive_group", "")))
+			result["achievements"].append(ach.get("id", ""))
+	return result
+
+func _achievement_met(ach: Dictionary) -> bool:
+	var req: Dictionary = ach.get("requires", {})
+	if req.has("path") and not achievement_paths.has(String(req["path"])):
+		return false
+	# 我方未击杀名单内单位（「不战而屈人之兵」：不击杀任何厢军，NPC 友军击杀不算）
+	for id in req.get("no_player_kills", []):
+		if int(_kill_teams.get(StringName(id), -1)) == Unit.Team.PLAYER:
+			return false
+	if req.has("boss_dead"):
+		var u := _find_unit(StringName(req["boss_dead"]))
+		if u != null and u.is_alive():
+			return false
+	return true
+
 # ---------------------------------------------------------------- 事件触发器（策划文档 6.9）
 
 func _check_triggers(event: Dictionary) -> void:
@@ -394,11 +460,30 @@ func _check_triggers(event: Dictionary) -> void:
 			continue
 		if not _trigger_condition_met(t.get("on", {}), event):
 			continue
+		if not _trigger_if_met(t.get("if", {})):
+			continue
 		t["fired"] = true
 		_run_trigger_actions(t.get("actions", []))
 
+## 触发器附加条件（如「若未集齐3担」「若公孙胜已上阵」，决策日志 D31）
+func _trigger_if_met(cond: Dictionary) -> bool:
+	if cond.is_empty():
+		return true
+	match String(cond.get("type", "")):
+		"collect_below":
+			return int(collect_counts.get(String(cond.get("target", "")), 0)) < int(cond.get("count", 1))
+		"unit_deployed":
+			var u := _find_unit(StringName(cond.get("unit", "")))
+			return u != null and u.is_alive()
+		"unit_alive":
+			var u := _find_unit(StringName(cond.get("unit", "")))
+			return u != null and u.is_alive()
+	return true
+
 func _trigger_condition_met(cond: Dictionary, event: Dictionary) -> bool:
 	match String(cond.get("type", "")):
+		"START":
+			return String(event.get("type")) == "START"
 		"TURN":
 			return String(event.get("type")) == "TURN" and int(event.get("turn", 0)) >= int(cond.get("turn", 1))
 		"UNIT_DEAD":
@@ -438,21 +523,69 @@ func _run_trigger_actions(actions: Array) -> void:
 					grid.set_terrain(c, StringName(a["cells"][c]))
 			"buff":
 				_apply_side_buff(a)
+			"status":
+				_apply_side_status(a)
+			"regen":
+				_apply_regen(a)
+			"achievement_path":
+				achievement_paths[String(a.get("path", ""))] = true
 
 func _apply_side_buff(a: Dictionary) -> void:
+	if a.has("unit"):
+		# 单目标标记（如白胜「生辰纲功臣」本关攻+20%）
+		var u := _find_unit(StringName(a.get("unit", "")))
+		if u != null and u.is_alive():
+			_add_trigger_buff(u, a)
+		return
 	var side := String(a.get("side", "enemy"))
 	for u in units:
 		if not u.is_alive() or u.is_object:
 			continue
 		if (side == "enemy") != (u.team == Unit.Team.ENEMY):
 			continue
+		_add_trigger_buff(u, a)
+
+func _add_trigger_buff(u: Unit, a: Dictionary) -> void:
+	var b := Buff.new()
+	b.buff_id = StringName("trigger_%s" % String(a.get("name", "buff")))
+	b.name = String(a.get("name", "触发器增益"))
+	b.stat_mods = {a.get("field", &"atk"): int(a.get("value", 0))}
+	b.duration = int(a.get("duration", 99))
+	b.dispellable = bool(a.get("dispellable", false))
+	u.add_buff(b)
+
+## 阵营范围控制状态（如 T2 蒙汗药酒：敌方全体睡眠，杨志例外时长，决策日志 D31）
+func _apply_side_status(a: Dictionary) -> void:
+	var side := String(a.get("side", "enemy"))
+	var status := StringName(a.get("status", "sleep"))
+	for u in units:
+		if not u.is_alive() or u.is_object:
+			continue
+		if (side == "enemy") != (u.team == Unit.Team.ENEMY):
+			continue
+		var duration := int(a.get("duration", 1))
+		if a.has("except") and u.data.unit_id == StringName(a["except"].get("unit", "")):
+			duration = int(a["except"].get("duration", duration))
 		var b := Buff.new()
-		b.buff_id = StringName("trigger_%s" % String(a.get("name", "buff")))
-		b.name = String(a.get("name", "触发器增益"))
-		b.stat_mods = {a.get("field", &"atk"): int(a.get("value", 0))}
-		b.duration = int(a.get("duration", 99))
-		b.dispellable = false
+		b.buff_id = status
+		b.name = String(a.get("name", status))
+		b.status = status
+		b.duration = duration
+		b.is_debuff = true
 		u.add_buff(b)
+
+## 每回合回血（杨志狂暴「羞刀难入鞘」回血 5%）
+func _apply_regen(a: Dictionary) -> void:
+	var u := _find_unit(StringName(a.get("unit", "")))
+	if u == null or not u.is_alive():
+		return
+	var b := Buff.new()
+	b.buff_id = StringName("regen_%s" % String(a.get("unit", "")))
+	b.name = String(a.get("name", "再生"))
+	b.tick_effect = {"kind": "hot", "percent": int(a.get("percent", 5))}
+	b.duration = int(a.get("duration", 99))
+	b.dispellable = false
+	u.add_buff(b)
 
 # ---------------------------------------------------------------- 攻击辅助
 

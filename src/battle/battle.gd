@@ -5,8 +5,8 @@ extends Node2D
 ## 　　　1/2/3 手动/半自动/全自动，F 集火。占位表现，正式 UI 在 M2 替换（决策日志 D12/D28）。
 
 const CELL := 64
-const ORIGIN := Vector2(384, 60)
-const LEVEL_ID := "debug_01"
+const ORIGIN := Vector2(320, 40)
+const LEVEL_ID := "ch03_01"
 
 const TERRAIN_COLORS := {
 	&"plain": Color("8FBC4F"),
@@ -17,6 +17,7 @@ const TERRAIN_COLORS := {
 	&"camp": Color("C9A86A"),
 	&"fire": Color("D9642A"),
 	&"road": Color("C9A86A"),
+	&"wine_stall": Color("B85C8A"),
 }
 ## 稀有度配色（美术指导第四节：赤金/绛紫/靛青/竹绿）
 const QUALITY_COLORS := {
@@ -109,6 +110,12 @@ func _handle_battle_input(event: InputEvent) -> void:
 		if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE and not manager.action_used:
 			_try_skill(u, KEY_W == event.keycode)
 		return
+	if event is InputEventKey and event.pressed and event.keycode == KEY_E:
+		# E：夺取相邻物件（生辰纲担，1 回合引导，策划文档 7.3）
+		var u := manager.active_unit
+		if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE and not manager.action_used:
+			_try_interact(u)
+		return
 	if event is InputEventKey and event.pressed and event.keycode in [KEY_1, KEY_2, KEY_3]:
 		# 1=手动 2=半自动 3=全自动（8.5）
 		manager.auto_mode = [BattleManager.AutoMode.MANUAL, BattleManager.AutoMode.SEMI, BattleManager.AutoMode.FULL][event.keycode - KEY_1]
@@ -155,6 +162,17 @@ func _try_skill(u: Unit, is_ult: bool) -> void:
 	manager.submit_command(SkillCommand.new(u, skill))
 	manager.action_used = true
 	_after_player_action()
+
+## 对相邻物件执行夺取（引导期间受击打断）
+func _try_interact(u: Unit) -> void:
+	for obj in manager.units:
+		if manager.can_channel(u, obj):
+			manager.submit_command(InteractCommand.new(u, obj))
+			manager.action_used = true
+			print("%s 开始引导夺取……（下回合收讫，受击打断）" % u.display_name())
+			_after_player_action()
+			return
+	print("没有相邻可夺取的物件")
 
 func _handle_cell_click(cell_coords: Vector2i) -> void:
 	var u := manager.active_unit
@@ -311,6 +329,8 @@ func _draw_units() -> void:
 			draw_arc(center, CELL * 0.40, 0, TAU, 24, Color.WHITE, 3.0)
 		if u == manager.focus_target:
 			draw_arc(center, CELL * 0.46, 0, TAU, 24, Color("C99B3F"), 3.0)   # 集火标记（赤金）
+		if u.channeling != null:
+			draw_circle(center + Vector2(0, CELL * 0.42), 5.0, Color("F5F1E8"))   # 引导中标记
 		draw_line(center, center + Vector2(u.facing) * CELL * 0.30, Color("F5F1E8"), 3.0)
 		var bar := Rect2(center + Vector2(-CELL * 0.32, -CELL * 0.46), Vector2(CELL * 0.64, 5))
 		draw_rect(bar, Color("263238"))

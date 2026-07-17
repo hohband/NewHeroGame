@@ -8,9 +8,9 @@ func before_each() -> void:
 	loader.load_all()
 
 func test_loads_all_tables() -> void:
-	assert_eq(loader.units.size(), 24, "24 名武将")
-	assert_eq(loader.skills.size(), 26, "26 个技能")
-	assert_eq(loader.terrains.size(), 8, "8 种地形")
+	assert_eq(loader.units.size(), 30, "24 名武将 + 6 名敌方/剧情单位（enemies.csv）")
+	assert_eq(loader.skills.size(), 28, "26 个武将技能 + 2 个敌方技能")
+	assert_eq(loader.terrains.size(), 9, "8 种地形 + 酒摊互动格")
 
 func test_bom_stripped() -> void:
 	assert_true(loader.units.has(&"lin_chong"), "首行 unit_id 不含 BOM")

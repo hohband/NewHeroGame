@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bm3musw0fh5mx"
+
+[deps]
+
+files=["res://data/enemies.name.translation", "res://data/enemies.nickname.translation", "res://data/enemies.star.translation", "res://data/enemies.quality.translation", "res://data/enemies.class.translation", "res://data/enemies.hp.translation", "res://data/enemies.atk.translation", "res://data/enemies.def.translation", "res://data/enemies.mgc.translation", "res://data/enemies.spd.translation", "res://data/enemies.crit.translation", "res://data/enemies.dodge.translation", "res://data/enemies.block.translation", "res://data/enemies.move.translation", "res://data/enemies.range.translation", "res://data/enemies.range.translation", "res://data/enemies.weapon.translation", "res://data/enemies.skill.translation", "res://data/enemies.unlock.translation", "res://data/enemies.traits.translation"]
+
+source_file="res://data/enemies.csv"
+dest_files=["res://data/enemies.name.translation", "res://data/enemies.nickname.translation", "res://data/enemies.star.translation", "res://data/enemies.quality.translation", "res://data/enemies.class.translation", "res://data/enemies.hp.translation", "res://data/enemies.atk.translation", "res://data/enemies.def.translation", "res://data/enemies.mgc.translation", "res://data/enemies.spd.translation", "res://data/enemies.crit.translation", "res://data/enemies.dodge.translation", "res://data/enemies.block.translation", "res://data/enemies.move.translation", "res://data/enemies.range.translation", "res://data/enemies.range.translation", "res://data/enemies.weapon.translation", "res://data/enemies.skill.translation", "res://data/enemies.unlock.translation", "res://data/enemies.traits.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true
