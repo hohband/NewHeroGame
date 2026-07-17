@@ -191,8 +191,8 @@ static func _phys_dmg(skill: SkillData, multiplier: float, ctx: EffectContext, a
 		return [{"type": "damage", "source": ctx.actor, "target": target, "skill": skill.skill_id,
 			"amount": executed, "crit": false, "blocked": false, "dir_mod": 0.0, "height_mod": 0.0,
 			"died": true, "executed": true}]
-	# 修正类效果折算进技能倍率（决策日志 D21）
-	var mult := multiplier
+	# 修正类效果折算进技能倍率（决策日志 D21）；技能等级倍率（养成）一并乘入
+	var mult := multiplier * ctx.effect_mult
 	if mods.has("bonus_by_self_lost_hp"):
 		var lost := 1.0 - float(ctx.actor.hp) / float(ctx.actor.data.hp)
 		mult *= 1.0 + float(mods["bonus_by_self_lost_hp"]) * lost
@@ -226,9 +226,9 @@ static func _phys_dmg(skill: SkillData, multiplier: float, ctx: EffectContext, a
 			events.append_array(_phys_dmg(skill, 1.0, cctx))
 	return events
 
-## 治疗量 = 施法者谋略 × 倍率（文档未定义，决策日志 D19，待策划确认）
+## 治疗量 = 施法者谋略 × 倍率 × 技能等级倍率（D19 占位；养成倍率见 progression.csv）
 static func _heal(skill: SkillData, multiplier: float, ctx: EffectContext) -> Array:
-	var amount := maxi(0, roundi(float(ctx.actor.get_mgc()) * multiplier))
+	var amount := maxi(0, roundi(float(ctx.actor.get_mgc()) * multiplier * ctx.effect_mult))
 	var applied := ctx.target.heal(amount)
 	return [{"type": "heal", "source": ctx.actor, "target": ctx.target, "skill": skill.skill_id, "amount": applied}]
 

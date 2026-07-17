@@ -18,6 +18,7 @@ run/main_scene="res://scenes/battle/battle.tscn"
 [autoload]
 
 DataLoader="*res://src/autoload/data_loader.gd"
+SaveSystem="*res://src/autoload/save_system.gd"
 
 [display]
 

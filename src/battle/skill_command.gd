@@ -26,8 +26,13 @@ func execute(battle: BattleManager) -> Array:
 	actor.gain_rage(-skill.rage_cost)
 	var events: Array = []
 	var killed_any := false
+	# 技能等级效果倍率（养成系统：无档案为 1.0）
+	var effect_mult := 1.0
+	if actor.hero != null:
+		effect_mult = Progression.skill_effect_mult(actor.hero, skill.skill_id, battle.data.progression)
 	for t in targets:
 		var ctx := EffectContext.new(actor, t, battle.grid, battle.rolls, battle)
+		ctx.effect_mult = effect_mult
 		events.append_array(EffectSystem.execute(skill, ctx))
 		if not t.is_alive():
 			killed_any = true

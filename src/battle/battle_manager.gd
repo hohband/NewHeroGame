@@ -229,6 +229,10 @@ func _check_escort_arrival(u: Unit) -> void:
 # ---------------------------------------------------------------- 回合流转（CTB）
 
 func start_battle() -> void:
+	# 羁绊：同队原著搭档同场激活（策划文档 4.1、决策日志 D29）
+	var bond_events := BondSystem.apply_bonds(units, data.progression)
+	if not bond_events.is_empty():
+		tick_events.emit(null, bond_events)
 	advance_turn()
 
 func advance_turn() -> void:

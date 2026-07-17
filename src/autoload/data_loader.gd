@@ -8,6 +8,7 @@ const UNITS_CSV := "res://data/units.csv"
 const SKILLS_CSV := "res://data/skills.csv"
 const TERRAINS_CSV := "res://data/terrains.csv"
 const AI_WEIGHTS_CSV := "res://data/ai_weights.csv"
+const PROGRESSION_CSV := "res://data/progression.csv"
 const RESERVED_TXT := "res://data/reserved_units.txt"
 
 const QUALITIES: Array[StringName] = [&"orange", &"purple", &"blue", &"green"]
@@ -20,7 +21,16 @@ var units: Dictionary = {}      # unit_id -> UnitData
 var skills: Dictionary = {}     # skill_id -> SkillData
 var terrains: Dictionary = {}   # terrain_id -> TerrainData
 var ai_weights: Dictionary = {} # class -> {factor -> float}（策划文档 8.3 权重表）
+var progression: Dictionary = {} # 养成参数 key -> float（data/progression.csv）
 var reserved: Dictionary = {}   # 预留武将（未实装）：StringName -> true
+
+## 养成参数必备键（缺失视为数据错误，validate 检查）
+const PROGRESSION_KEYS: Array[String] = [
+	"level_exp_base", "level_stat_growth", "star_stat_mult", "star_max", "star_shard_cost",
+	"breakthrough_stat_step", "skill_level_max", "skill_level_mult", "skill_book_cost",
+	"weapon_enhance_max", "weapon_enhance_atk", "weapon_enhance_gold",
+	"weapon_refine_max", "weapon_refine_atk", "bond_stat_bonus",
+]
 
 func _ready() -> void:
 	load_all()
@@ -30,6 +40,7 @@ func load_all() -> void:
 	skills = _load_skills(SKILLS_CSV)
 	units = _load_units(UNITS_CSV)
 	ai_weights = _load_ai_weights(AI_WEIGHTS_CSV)
+	progression = _load_key_values(PROGRESSION_CSV)
 	reserved = _load_reserved(RESERVED_TXT)
 
 func get_unit(id: StringName) -> UnitData:
@@ -156,6 +167,12 @@ static func _load_terrains(path: String) -> Dictionary:
 		out[t.terrain_id] = t
 	return out
 
+static func _load_key_values(path: String) -> Dictionary:
+	var out: Dictionary = {}
+	for row in _read_table(path):
+		out[String(row.get("key", ""))] = float(str(row.get("value", "0")))
+	return out
+
 static func _load_ai_weights(path: String) -> Dictionary:
 	var out: Dictionary = {}
 	for row in _read_table(path):
@@ -233,4 +250,7 @@ func validate() -> Array[String]:
 			errors.append("地形 %s：move_cost 不得为负" % id)
 		if t.move_cost == 99 and t.passable:
 			errors.append("地形 %s：move_cost=99（不可通行）但 passable=1" % id)
+	for key in PROGRESSION_KEYS:
+		if not progression.has(key):
+			errors.append("养成参数缺失：%s（progression.csv）" % key)
 	return errors

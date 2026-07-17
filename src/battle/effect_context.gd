@@ -14,6 +14,8 @@ var depth := 0
 var summoned: Unit = null
 ## 战斗总控引用（summon 注册新单位用）
 var battle: BattleManager = null
+## 技能等级效果倍率（养成系统；无档案时为 1.0）
+var effect_mult := 1.0
 
 func _init(p_actor: Unit = null, p_target: Unit = null, p_grid: Grid = null, p_rolls: RollSource = null, p_battle: BattleManager = null) -> void:
 	actor = p_actor
