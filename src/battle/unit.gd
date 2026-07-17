@@ -67,11 +67,11 @@ func get_block() -> int:
 func get_crit() -> int:
 	return data.crit + get_stat_mod(&"crit")
 
-## 移动力：基础 + Buff 修正（格）+ 地形规则（水面 -1，水军系免疫为后续扩展，决策日志 D18）
+## 移动力：基础 + Buff 修正（格）+ 地形规则（水面 -1，水军系免疫，决策日志 D18/D36）
 func get_move(grid: Grid) -> int:
 	var mod := get_stat_mod(&"move")
 	var cell := grid.get_cell(coords)
-	if cell != null and cell.terrain.terrain_id == &"water":
+	if cell != null and cell.terrain.terrain_id == &"water" and not data.traits.has(&"water_walker"):
 		mod -= 1
 	return maxi(0, data.move + mod)
 

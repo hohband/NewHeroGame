@@ -63,7 +63,7 @@ func get_reachable(mover: Unit, budget: int) -> Dictionary:
 			var next: Vector2i = current + d
 			if not can_pass(next, mover):
 				continue
-			var new_cost: int = cost[current] + cells[next].terrain.move_cost
+			var new_cost: int = cost[current] + move_cost_of(cells[next], mover)
 			if new_cost > budget:
 				continue
 			if cost.has(next) and cost[next] <= new_cost:
@@ -98,8 +98,14 @@ func _build_astar(mover: Unit) -> AStarGrid2D:
 			solid = true   # 敌军不可穿过
 		astar.set_point_solid(coords, solid)
 		if not solid:
-			astar.set_point_weight_scale(coords, float(maxi(1, cell.terrain.move_cost)))
+			astar.set_point_weight_scale(coords, float(maxi(1, move_cost_of(cell, mover))))
 	return astar
+
+## 格子进入消耗：水军系（traits=water_walker）视水面为坦途（策划文档 6.3 水面留坑，决策日志 D36）
+func move_cost_of(cell: GridCell, mover: Unit) -> int:
+	if cell.terrain.terrain_id == &"water" and mover != null and mover.data.traits.has(&"water_walker"):
+		return 1
+	return cell.terrain.move_cost
 
 func place_unit(unit: Unit, at: Vector2i) -> void:
 	unit.coords = at

@@ -6,13 +6,9 @@ hu_yanzhuo
 yang_zhi
 suo_chao
 shi_jin
-yan_qing
-xu_ning
-zhang_shun
 ruan_xiaoer
 ruan_xiaowu
 ruan_xiaoqi
-wang_ying
 gu_dasao
 sun_li
 xie_zhen
@@ -20,6 +16,5 @@ xie_bao
 # —— 其他预留 ——
 song_jiang
 zhang_qing2
-gong_wang
-ding_desun
 pang_wanchun
+lu_junyi

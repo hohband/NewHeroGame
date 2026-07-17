@@ -8,8 +8,8 @@ func before_each() -> void:
 	loader.load_all()
 
 func test_loads_all_tables() -> void:
-	assert_eq(loader.units.size(), 30, "24 名武将 + 6 名敌方/剧情单位（enemies.csv）")
-	assert_eq(loader.skills.size(), 28, "26 个武将技能 + 2 个敌方技能")
+	assert_eq(loader.units.size(), 36, "24+6 名武将 + 6 名敌方/剧情单位（enemies.csv）")
+	assert_eq(loader.skills.size(), 34, "28 个技能 + 第二批 6 个")
 	assert_eq(loader.terrains.size(), 9, "8 种地形 + 酒摊互动格")
 
 func test_bom_stripped() -> void:
@@ -46,5 +46,5 @@ func test_validate_passes() -> void:
 	assert_eq(loader.validate().size(), 0, "交付数据表应通过全部校验")
 
 func test_reserved_registered() -> void:
-	assert_true(loader.reserved.has(&"xu_ning"))
+	assert_true(loader.reserved.has(&"lu_junyi"))
 	assert_true(loader.reserved.has(&"zhang_qing2"))
