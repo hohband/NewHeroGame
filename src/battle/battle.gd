@@ -34,6 +34,15 @@ var selected_roster := -1             # 布阵：选中的候选序号（roster_
 var roster_ids: Array[StringName] = []  # 候选池（按档案拥有情况过滤后）
 var _result_shown := false
 var cursor := Vector2i(0, 0)            # 手柄虚拟光标（Deck 适配，M2）
+
+# ---- 战斗 UI 层（试玩反馈：提示必须进游戏，不能只打控制台）----
+var _ui: CanvasLayer
+var _top_label: Label                   # 关卡名 + 回合数
+var _hint_label: Label                  # 当前情境操作提示
+var _msg_label: Label                   # 底部消息条（剧情/教学/系统提示，最近 2 条）
+var _start_button: Button               # 开始战斗（布阵阶段）
+var _back_button: Button                # 返回山寨
+var _messages: Array[String] = []
 var _unit_tex: Dictionary = {}          # unit_id -> Texture2D / null（战斗立绘缓存）
 var _portrait_tex: Dictionary = {}      # unit_id -> Texture2D / null（头像缓存）
 
@@ -81,12 +90,88 @@ func _ready() -> void:
 	manager.tick_events.connect(_on_tick_events)
 	manager.unit_died.connect(func(_u): queue_redraw())
 	manager.battle_ended.connect(_on_battle_ended)
-	manager.deploy_changed.connect(func(): queue_redraw())
-	manager.dialogue.connect(func(text): print("【剧情】%s" % text))
-	manager.round_started.connect(func(n): print("—— 第 %d 回合 ——" % n))
+	manager.deploy_changed.connect(_update_ui_state)
+	manager.state_changed.connect(func(_s): _update_ui_state())
+	manager.dialogue.connect(_push_message)
+	manager.round_started.connect(_on_round_started)
+	_build_ui()
 	if not GameState.expedition.is_empty():
 		_expedition_deploy()   # 远征：跳过手动布阵，自动上阵并继承状态
+	_update_ui_state()
 	queue_redraw()
+
+# ---------------------------------------------------------------- 战斗 UI 层
+
+func _build_ui() -> void:
+	_ui = CanvasLayer.new()
+	add_child(_ui)
+	_top_label = Label.new()
+	_top_label.position = Vector2(12, 8)
+	_top_label.text = manager.level.name
+	_ui.add_child(_top_label)
+	_hint_label = Label.new()
+	_hint_label.position = Vector2(12, 626)
+	_hint_label.add_theme_color_override("font_color", Color("C9A86A"))
+	_ui.add_child(_hint_label)
+	_msg_label = Label.new()
+	_msg_label.position = Vector2(12, 650)
+	_msg_label.size = Vector2(1050, 60)
+	_msg_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_ui.add_child(_msg_label)
+	_start_button = Button.new()
+	_start_button.text = "开始战斗 ▶"
+	_start_button.position = Vector2(1120, 640)
+	_start_button.custom_minimum_size = Vector2(140, 40)
+	_start_button.pressed.connect(_on_start_battle_pressed)
+	_ui.add_child(_start_button)
+	_back_button = Button.new()
+	_back_button.text = "← 返回山寨"
+	_back_button.position = Vector2(1120, 594)
+	_back_button.custom_minimum_size = Vector2(140, 36)
+	_back_button.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/hub/hub.tscn"))
+	_ui.add_child(_back_button)
+	_update_top_label()
+
+## 消息条：最近 2 条（剧情/教学/系统提示统一进游戏；控制台同步保留）
+func _push_message(text: String) -> void:
+	_messages.append(text)
+	if _messages.size() > 2:
+		_messages.pop_front()
+	_msg_label.text = "\n".join(_messages)
+	print(text)
+
+func _update_top_label() -> void:
+	if manager.round_count > 0:
+		_top_label.text = "%s ｜ 第 %d 回合" % [manager.level.name, manager.round_count]
+	else:
+		_top_label.text = manager.level.name
+
+func _on_round_started(n: int) -> void:
+	_update_top_label()
+	print("—— 第 %d 回合 ——" % n)
+
+## 状态驱动的按钮可见性与提示行
+func _update_ui_state() -> void:
+	if _start_button == null:
+		return
+	var in_deploy: bool = manager.state == BattleManager.State.DEPLOY
+	_start_button.visible = in_deploy
+	_start_button.disabled = manager.deployed.is_empty()
+	queue_redraw()
+	if in_deploy:
+		_hint_label.text = "布阵：点左侧候选 → 点部署区上阵；点已上阵（非必出）撤下；就绪后点「开始战斗」"
+	elif manager.state == BattleManager.State.BATTLE_END:
+		_hint_label.text = ""
+
+func _on_start_battle_pressed() -> void:
+	# 失败原因进消息条（此前只在控制台，试玩者看不到）
+	var missing := manager.level.required_units.filter(
+		func(rid): return not manager.deployed.any(func(u): return u.data.unit_id == rid))
+	if not missing.is_empty():
+		_push_message("必出武将未全部上阵：%s" % "、".join(missing.map(func(rid): return DataLoader.get_unit(rid).name)))
+		return
+	if manager.confirm_deploy():
+		_push_message("开战！")
 
 ## 远征布阵：存活队员自动落位（生命跨层继承 + 远征增益）
 func _expedition_deploy() -> void:
@@ -125,8 +210,7 @@ func _handle_deploy_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ENTER \
 			or event.is_action_pressed("battle_wait"):
-		if manager.confirm_deploy():
-			print("开战！")
+		_on_start_battle_pressed()
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var pos := get_local_mouse_position()
@@ -144,7 +228,11 @@ func _deploy_at_cell(cell_coords: Vector2i) -> void:
 		return
 	var cell := grid.get_cell(cell_coords)
 	if cell.occupant != null and manager.deployed.has(cell.occupant):
-		manager.undeploy_unit(cell.occupant)   # 点已上阵单位：撤下
+		# 点已上阵单位：必出武将不可撤下（可点其他格调整位置前先撤非必出成员）
+		if manager.level.required_units.has(cell.occupant.data.unit_id):
+			_push_message("%s 为必出武将，不可撤下" % cell.occupant.display_name())
+			return
+		manager.undeploy_unit(cell.occupant)
 		AudioManager.play("sfx_ui_click")
 		return
 	if selected_roster != -1:
@@ -245,7 +333,7 @@ func _handle_battle_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode in [KEY_1, KEY_2, KEY_3]:
 		# 1=手动 2=半自动 3=全自动（8.5）
 		manager.auto_mode = [BattleManager.AutoMode.MANUAL, BattleManager.AutoMode.SEMI, BattleManager.AutoMode.FULL][event.keycode - KEY_1]
-		print("托管模式：%s" % ["手动", "半自动", "全自动"][event.keycode - KEY_1])
+		_push_message("托管模式：%s（1 手动 / 2 半自动 / 3 全自动）" % ["手动", "半自动", "全自动"][event.keycode - KEY_1])
 		var u := manager.active_unit
 		if manager.auto_mode != BattleManager.AutoMode.MANUAL and u != null and u.team == Unit.Team.PLAYER:
 			manager.run_ai()
@@ -255,10 +343,10 @@ func _handle_battle_input(event: InputEvent) -> void:
 		if cell != null and cell.occupant != null and cell.occupant.team == Unit.Team.ENEMY:
 			if manager.focus_target == cell.occupant:
 				manager.set_focus_target(null)
-				print("取消集火")
+				_push_message("取消集火")
 			else:
 				manager.set_focus_target(cell.occupant)
-				print("集火目标：%s" % cell.occupant.display_name())
+				_push_message("集火目标：%s（再次按 F 取消）" % cell.occupant.display_name())
 		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		pending_skill = null
@@ -275,10 +363,10 @@ func _handle_battle_input(event: InputEvent) -> void:
 func _try_skill(u: Unit, is_ult: bool) -> void:
 	var skill := DataLoader.get_skill_for_unit(u.data.unit_id, &"ult" if is_ult else &"active")
 	if skill == null:
-		print("%s 没有%s" % [u.display_name(), "绝技" if is_ult else "主动技"])
+		_push_message("%s 没有%s" % [u.display_name(), "绝技" if is_ult else "主动技"])
 		return
 	if not manager.can_use_skill(u, skill):
-		print("%s 的 %s 暂不可用（怒气 %d/%d，冷却 %d）" % [
+		_push_message("%s 的 %s 暂不可用（怒气 %d/%d，冷却 %d）" % [
 			u.display_name(), skill.name, u.rage, skill.rage_cost, u.skill_cooldown(skill.skill_id)])
 		return
 	if Targeting.needs_aim(skill):
@@ -295,10 +383,10 @@ func _try_interact(u: Unit) -> void:
 		if manager.can_channel(u, obj):
 			manager.submit_command(InteractCommand.new(u, obj))
 			manager.action_used = true
-			print("%s 开始引导夺取……（下回合收讫，受击打断）" % u.display_name())
+			_push_message("%s 开始引导夺取……（下回合收讫，受击打断）" % u.display_name())
 			_after_player_action()
 			return
-	print("没有相邻可夺取的物件")
+	_push_message("没有相邻可夺取的物件（走到相邻格按 E）")
 
 func _handle_cell_click(cell_coords: Vector2i) -> void:
 	var u := manager.active_unit
@@ -348,6 +436,9 @@ func _on_turn_started(unit: Unit) -> void:
 	pending_skill = null
 	if unit.team == Unit.Team.PLAYER and manager.auto_mode == BattleManager.AutoMode.MANUAL:
 		reachable = grid.get_reachable(unit, unit.get_move(grid))
+		_hint_label.text = "%s 行动中：点蓝格移动 / 点敌人攻击 / Q 主动技 / W 绝技 / E 夺取 / 空格待机" % unit.display_name()
+	else:
+		_hint_label.text = "%s 行动中……" % unit.display_name()
 	AudioManager.play("sfx_turn")
 	queue_redraw()
 	# 敌方固定 AI；我方在自动/半自动托管下也由评分 AI 驱动（策划文档 8.5）
