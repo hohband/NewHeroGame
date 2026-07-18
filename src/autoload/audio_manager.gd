@@ -75,20 +75,28 @@ func has_sfx(name: String) -> bool:
 
 var _bgm_name := ""
 
-## BGM 播放（占位 chiptune 已就位，tools/synth_bgm.py；正式曲到货按同名文件替换，D39）
+## BGM 播放：正式 OGG 优先（AI 生成，见 assets/audio/bgm/生成记录.md），
+## chiptune WAV 兜底（tools/synth_bgm.py，决策日志 D39）
 func play_bgm(name: String) -> void:
 	if _bgm_name == name and _bgm_player.playing:
 		return
-	var path := "res://assets/audio/bgm/%s.wav" % name
-	if not ResourceLoader.exists(path):
+	var stream: AudioStream = null
+	var ogg_path := "res://assets/audio/bgm/%s.ogg" % name
+	var wav_path := "res://assets/audio/bgm/%s.wav" % name
+	if ResourceLoader.exists(ogg_path):
+		stream = AudioStreamOggVorbis.load_from_file(ogg_path)
+		if stream != null:
+			stream.loop = true
+			stream.loop_offset = 0.0
+	elif ResourceLoader.exists(wav_path):
+		stream = AudioStreamWAV.load_from_file(wav_path)
+		if stream != null:
+			stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+			stream.loop_begin = 0
+			stream.loop_end = stream.get_data().size() / 2   # 16bit 单声道：字节数 ÷2 = 采样帧数
+	if stream == null:
 		return   # 该曲目缺失则保持静默
 	_bgm_name = name
-	var stream := AudioStreamWAV.load_from_file(path)
-	if stream == null:
-		return
-	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	stream.loop_begin = 0
-	stream.loop_end = stream.get_data().size() / 2   # 16bit 单声道：字节数 ÷2 = 采样帧数
 	_bgm_player.stream = stream
 	_bgm_player.play()
 
