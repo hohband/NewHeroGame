@@ -12,10 +12,13 @@ godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit
 # 数据表校验（改 CSV 后必跑）
 godot --headless --path . -s src/tools/validate_data.gd
 
+# 数值平衡模拟（改数值/关卡后复跑，输出胜率/回合/阵亡）
+godot --headless --path . -s src/tools/balance_sim.gd -- --all-story --runs 10
+
 # 导入/刷新类缓存（新增含 class_name 的脚本后必须执行，否则全局类找不到）
 godot --headless --path . --import
 
-# 运行调试战斗场景（左键移动/攻击，空格结束行动）
+# 运行游戏（主界面 hub；战斗操作见场景注释）
 godot --path .
 ```
 
