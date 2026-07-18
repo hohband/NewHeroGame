@@ -29,15 +29,23 @@ func _panel(title_text: String) -> VBoxContainer:
 	vbox.add_child(sep)
 	return vbox
 
-## 手柄/键盘焦点：每个界面默认聚焦第一个按钮（Deck 适配，M2）
+## 手柄/键盘焦点：每个界面默认聚焦第一个按钮（Deck 适配，M2）；顺带全量接 UI 音效
 func _focus_first() -> void:
 	var queue := get_children()
+	var first: Button = null
 	while not queue.is_empty():
 		var c: Node = queue.pop_front()
-		if c is Button and not c.disabled:
-			c.grab_focus()
-			return
+		if c is Button:
+			if not (c as Button).pressed.is_connected(_ui_click):
+				(c as Button).pressed.connect(_ui_click)
+			if first == null and not c.disabled:
+				first = c
 		queue.append_array(c.get_children())
+	if first != null:
+		first.grab_focus()
+
+func _ui_click() -> void:
+	AudioManager.play("sfx_ui_click")
 
 # ---------------------------------------------------------------- 主菜单
 

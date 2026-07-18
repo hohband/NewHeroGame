@@ -20,6 +20,7 @@ run/main_scene="res://scenes/hub/hub.tscn"
 DataLoader="*res://src/autoload/data_loader.gd"
 SaveSystem="*res://src/autoload/save_system.gd"
 GameState="*res://src/autoload/game_state.gd"
+AudioManager="*res://src/autoload/audio_manager.gd"
 
 [display]
 

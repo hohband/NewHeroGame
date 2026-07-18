@@ -56,7 +56,7 @@ func _ready() -> void:
 	grid = manager.grid
 	roster_ids = level.roster.filter(func(id): return SaveSystem.profile == null or SaveSystem.profile.has_hero(id))
 	manager.turn_started.connect(_on_turn_started)
-	manager.command_executed.connect(func(_cmd, _events): queue_redraw())
+	manager.command_executed.connect(_on_command_executed)
 	manager.unit_died.connect(func(_u): queue_redraw())
 	manager.battle_ended.connect(_on_battle_ended)
 	manager.deploy_changed.connect(func(): queue_redraw())
@@ -324,6 +324,17 @@ func _on_turn_started(unit: Unit) -> void:
 	pending_skill = null
 	if unit.team == Unit.Team.PLAYER and manager.auto_mode == BattleManager.AutoMode.MANUAL:
 		reachable = grid.get_reachable(unit, unit.get_move(grid))
+	AudioManager.play("sfx_turn")
+	queue_redraw()
+
+## 指令回放音效（逻辑已瞬时结算，此处纯表现层，决策日志 D39）
+func _on_command_executed(cmd: Command, events: Array) -> void:
+	if cmd is SkillCommand:
+		AudioManager.play_skill(cmd.skill)
+	elif cmd is AttackCommand:
+		AudioManager.play_skill(cmd.skill)
+	for e in events:
+		AudioManager.play_event(e)
 	queue_redraw()
 	# 敌方固定 AI；我方在自动/半自动托管下也由评分 AI 驱动（策划文档 8.5）
 	var ai_driven := unit.team != Unit.Team.PLAYER or manager.auto_mode != BattleManager.AutoMode.MANUAL
@@ -337,6 +348,7 @@ func _on_battle_ended(winner: int) -> void:
 	if _result_shown:
 		return
 	_result_shown = true
+	AudioManager.play("sfx_win" if winner == Unit.Team.PLAYER else "sfx_lose")
 	if not GameState.expedition.is_empty():
 		_expedition_end(winner)
 		return
@@ -377,10 +389,14 @@ func _show_result_panel(summary: Dictionary) -> void:
 			lines.append("上阵武将经验 +%d" % int(summary["exp_each"]))
 		for id in summary.get("level_ups", {}):
 			lines.append("  %s 升 %d 级！" % [DataLoader.get_unit(id).name, int(summary["level_ups"][id])])
+		if not (summary.get("level_ups", {}) as Dictionary).is_empty():
+			AudioManager.play("sfx_levelup")
 		for ach in summary.get("achievements", []):
 			lines.append("成就达成：%s" % _achievement_name(ach))
 		for id in summary.get("unlocked", []):
 			lines.append("新武将加入：%s！" % DataLoader.get_unit(id).name)
+		if not (summary.get("unlocked", []) as Array).is_empty():
+			AudioManager.play("sfx_unlock")
 		if summary.get("chapter_now", 0) > manager.level.chapter:
 			lines.append("—— 第 %d 章开启 ——" % int(summary["chapter_now"]))
 		for line in summary.get("epilogue", []):
