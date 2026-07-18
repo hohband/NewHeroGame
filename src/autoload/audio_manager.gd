@@ -46,7 +46,8 @@ func _load_streams() -> void:
 	for f in dir.get_files():
 		if not f.ends_with(".wav"):
 			continue
-		var stream := AudioStreamWAV.load_from_file(SFX_DIR + f)
+		# ResourceLoader 加载导入资源（导出包内不可用 load_from_file 读原始字节，D40 注）
+		var stream := ResourceLoader.load(SFX_DIR + f) as AudioStreamWAV
 		if stream == null:
 			continue
 		var base := f.trim_suffix(".wav")
@@ -84,12 +85,12 @@ func play_bgm(name: String) -> void:
 	var ogg_path := "res://assets/audio/bgm/%s.ogg" % name
 	var wav_path := "res://assets/audio/bgm/%s.wav" % name
 	if ResourceLoader.exists(ogg_path):
-		stream = AudioStreamOggVorbis.load_from_file(ogg_path)
+		stream = ResourceLoader.load(ogg_path) as AudioStreamOggVorbis   # 导入资源形式（D40 注）
 		if stream != null:
 			stream.loop = true
 			stream.loop_offset = 0.0
 	elif ResourceLoader.exists(wav_path):
-		stream = AudioStreamWAV.load_from_file(wav_path)
+		stream = ResourceLoader.load(wav_path) as AudioStreamWAV
 		if stream != null:
 			stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 			stream.loop_begin = 0

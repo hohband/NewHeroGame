@@ -23,11 +23,15 @@ godot --path .
 
 # 战斗场景冒烟（scene 直跑，覆盖 hub 之外的战斗路径；改 battle.gd 后必跑）
 godot --headless --path . res://scenes/battle/battle.tscn --quit-after 60
+
+# 桌面 app 导出（D40：桌面直发优先；产物在 build/，已 gitignore）
+mkdir -p build/macos && godot --headless --path . --export-release "macOS" build/macos/shuihu.dmg
+mkdir -p build/windows && godot --headless --path . --export-release "Windows Desktop" build/windows/shuihu_x64.exe
 ```
 
 ## 工程红线（详见 docs/水浒战棋-开发计划.md 第六章）
 
-1. **CSV 是唯一数据源**：数值只改 `data/*.csv`，禁止代码硬编码；`docs/System/` 的 CSV 是设计快照，不要改、不要以它为准。
+1. **CSV 是唯一数据源**：数值只改 `data/*.csv`，禁止代码硬编码；`docs/System/` 的 CSV 是设计快照，不要改、不要以它为准。**注意：六张数据表的 .import 固定为 `importer="keep"`（被 csv_translation 导入器改写会导致导出包丢原始 CSV，D40 注）。**
 2. **逻辑与表现分离**：逻辑层（`src/battle/` 除 battle.gd 外）不依赖场景显示；指令执行瞬时结算，表现事件排队回放。
 3. **指令管道统一**：玩家输入与 AI 都生成 `Command` 子类，经 `BattleManager.submit_command()` 执行。
 4. **技能零程序介入**：新技能 = skills.csv 加一行拼原子效果；新原子效果才动 `EffectSystem`，并同步数据表说明的词表。

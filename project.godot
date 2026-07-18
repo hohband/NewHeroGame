@@ -12,6 +12,7 @@ config_version=5
 
 config/name="水浒战棋"
 config/description="替天行道 · 聚义梁山 —— 战棋（SRPG）＋ 卡牌养成"
+config/icon="res://icon.png"
 config/features=PackedStringArray("4.7")
 run/main_scene="res://scenes/hub/hub.tscn"
 
@@ -35,3 +36,4 @@ theme/custom="res://assets/theme.tres"
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

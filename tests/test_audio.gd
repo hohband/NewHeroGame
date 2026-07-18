@@ -20,8 +20,8 @@ func test_wav_files_exist_and_valid() -> void:
 	for name in NEED:
 		var path := "res://assets/audio/sfx/%s.wav" % name
 		assert_true(FileAccess.file_exists(path), "%s 存在" % name)
-		var stream := AudioStreamWAV.load_from_file(path)
-		assert_not_null(stream, "%s 可加载" % name)
+		var stream := ResourceLoader.load(path) as AudioStreamWAV
+		assert_not_null(stream, "%s 可加载（ResourceLoader，D40 注）" % name)
 		assert_gt(stream.get_length(), 0.02, "%s 有实际内容" % name)
 
 func test_variants_grouped() -> void:
@@ -86,8 +86,8 @@ func test_bgm_files_valid() -> void:
 	for name in ["bgm_main", "bgm_battle", "bgm_camp"]:
 		var ogg := "res://assets/audio/bgm/%s.ogg" % name
 		assert_true(FileAccess.file_exists(ogg), "正式 OGG 存在：%s" % name)
-		var stream := AudioStreamOggVorbis.load_from_file(ogg)
-		assert_not_null(stream, "%s OGG 可加载" % name)
+		var stream := ResourceLoader.load(ogg) as AudioStreamOggVorbis
+		assert_not_null(stream, "%s OGG 可加载（ResourceLoader，D40 注）" % name)
 		assert_gt(stream.get_length(), 60.0, "%s 为完整曲目（生成记录：60s+）" % name)
 
 func test_play_bgm_prefers_ogg_with_wav_fallback() -> void:
