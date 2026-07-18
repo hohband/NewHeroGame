@@ -10,6 +10,7 @@ const POOL_SIZE := 8
 
 var _streams: Dictionary = {}     # 基名 -> Array[AudioStreamWAV]（_01.._0N 变体）
 var _players: Array[AudioStreamPlayer] = []
+var _bgm_player: AudioStreamPlayer = null
 var _next := 0
 var _rng := RandomNumberGenerator.new()
 var enabled := true
@@ -19,9 +20,23 @@ func _ready() -> void:
 	_load_streams()
 	for i in range(POOL_SIZE):
 		var p := AudioStreamPlayer.new()
-		p.bus = &"Master"
+		p.bus = &"SFX"
 		add_child(p)
 		_players.append(p)
+	_bgm_player = AudioStreamPlayer.new()
+	_bgm_player.bus = &"Music"
+	add_child(_bgm_player)
+
+## 应用音量设置（存于档案 settings，hub 设置界面修改后调用）
+func apply_settings(s: Dictionary) -> void:
+	AudioServer.set_bus_volume_db(0, linear_to_db(float(s.get("volume_master", 1.0))))
+	var music_idx := AudioServer.get_bus_index(&"Music")
+	var sfx_idx := AudioServer.get_bus_index(&"SFX")
+	if music_idx >= 0:
+		AudioServer.set_bus_volume_db(music_idx, linear_to_db(float(s.get("volume_music", 1.0))))
+	if sfx_idx >= 0:
+		AudioServer.set_bus_volume_db(sfx_idx, linear_to_db(float(s.get("volume_sfx", 1.0))))
+	AudioServer.set_bus_mute(0, bool(s.get("mute", false)))
 
 func _load_streams() -> void:
 	var dir := DirAccess.open(SFX_DIR)
@@ -67,7 +82,7 @@ func play_bgm(_name: String) -> void:
 ## 战斗事件（command_executed 的事件数组）逐条映射
 func play_event(e: Dictionary) -> void:
 	match String(e.get("type", "")):
-		"move", "teleport":
+		"move", "teleport", "pull", "push", "swap":
 			play("sfx_move")
 		"damage":
 			if bool(e.get("died", false)):
@@ -88,7 +103,7 @@ func play_event(e: Dictionary) -> void:
 			play("sfx_debuff")
 		"dispel":
 			play("sfx_heal")
-		"collect":
+		"collect", "channel_start":
 			play("sfx_collect")
 		"rage":
 			pass

@@ -57,6 +57,7 @@ func _ready() -> void:
 	roster_ids = level.roster.filter(func(id): return SaveSystem.profile == null or SaveSystem.profile.has_hero(id))
 	manager.turn_started.connect(_on_turn_started)
 	manager.command_executed.connect(_on_command_executed)
+	manager.tick_events.connect(_on_tick_events)
 	manager.unit_died.connect(func(_u): queue_redraw())
 	manager.battle_ended.connect(_on_battle_ended)
 	manager.deploy_changed.connect(func(): queue_redraw())
@@ -123,11 +124,13 @@ func _deploy_at_cell(cell_coords: Vector2i) -> void:
 	var cell := grid.get_cell(cell_coords)
 	if cell.occupant != null and manager.deployed.has(cell.occupant):
 		manager.undeploy_unit(cell.occupant)   # 点已上阵单位：撤下
+		AudioManager.play("sfx_ui_click")
 		return
 	if selected_roster != -1:
 		var id: StringName = roster_ids[selected_roster]
 		var hero := SaveSystem.profile.get_hero(id) if SaveSystem.profile != null else null
 		manager.deploy_unit(id, cell_coords, hero)
+		AudioManager.play("sfx_ui_click")
 		selected_roster = -1
 
 func _cycle_roster(dir: int) -> void:
@@ -336,6 +339,17 @@ func _on_command_executed(cmd: Command, events: Array) -> void:
 	for e in events:
 		AudioManager.play_event(e)
 	queue_redraw()
+
+## 回合开始 tick 音效：DoT/再生/地形/跳过（D39）
+func _on_tick_events(_unit: Unit, events: Array) -> void:
+	for e in events:
+		match String(e.get("type", "")):
+			"dot":
+				AudioManager.play("sfx_debuff")
+			"hot", "terrain_heal":
+				AudioManager.play("sfx_heal")
+			"turn_skipped":
+				AudioManager.play("sfx_debuff")
 	# 敌方固定 AI；我方在自动/半自动托管下也由评分 AI 驱动（策划文档 8.5）
 	var ai_driven := unit.team != Unit.Team.PLAYER or manager.auto_mode != BattleManager.AutoMode.MANUAL
 	if ai_driven:

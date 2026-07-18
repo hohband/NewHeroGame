@@ -56,3 +56,25 @@ func test_event_mapping_no_crash() -> void:
 		{"type": "buff"}, {"type": "status"}, {"type": "collect"}, {"type": "dispel"},
 	]:
 		manager.play_event(e)
+
+# ---------------------------------------------------------------- 总线与音量设置
+
+func test_bus_layout_exists() -> void:
+	assert_gt(AudioServer.get_bus_index(&"Music"), -1, "Music 总线存在（default_bus_layout.tres）")
+	assert_gt(AudioServer.get_bus_index(&"SFX"), -1, "SFX 总线存在")
+
+func test_apply_settings_and_restore() -> void:
+	var s := {"volume_master": 1.0, "volume_sfx": 1.0, "volume_music": 1.0, "mute": true}
+	manager.apply_settings(s)
+	assert_true(AudioServer.is_bus_mute(0), "静音应用")
+	manager.apply_settings({"mute": false})
+	assert_false(AudioServer.is_bus_mute(0), "恢复")
+
+func test_settings_persist_in_profile() -> void:
+	var p := PlayerProfile.new()
+	p.get_settings()["volume_sfx"] = 0.5
+	p.get_settings()["mute"] = true
+	var p2 := PlayerProfile.from_dict(p.to_dict())
+	assert_eq(float(p2.settings["volume_sfx"]), 0.5, "音量设置入档（D39 注）")
+	assert_true(p2.settings["mute"])
+	assert_eq(float(p2.get_settings()["volume_master"]), 1.0, "缺省键补默认值")

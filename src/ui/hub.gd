@@ -5,6 +5,8 @@ extends Control
 func _ready() -> void:
 	if SaveSystem.profile == null and SaveSystem.has_save():
 		SaveSystem.load_game()
+	if SaveSystem.profile != null:
+		AudioManager.apply_settings(SaveSystem.profile.get_settings())
 	_build_main()
 	_focus_first()
 
@@ -38,6 +40,10 @@ func _focus_first() -> void:
 		if c is Button:
 			if not (c as Button).pressed.is_connected(_ui_click):
 				(c as Button).pressed.connect(_ui_click)
+			if not (c as Button).mouse_entered.is_connected(_ui_hover):
+				(c as Button).mouse_entered.connect(_ui_hover)
+			if not (c as Button).focus_entered.is_connected(_ui_hover):
+				(c as Button).focus_entered.connect(_ui_hover)
 			if first == null and not c.disabled:
 				first = c
 		queue.append_array(c.get_children())
@@ -46,6 +52,48 @@ func _focus_first() -> void:
 
 func _ui_click() -> void:
 	AudioManager.play("sfx_ui_click")
+
+func _ui_hover() -> void:
+	AudioManager.play("sfx_ui_hover")
+
+# ---------------------------------------------------------------- 设置（音量）
+
+func _build_settings() -> void:
+	var vbox := _panel("设置")
+	var s := SaveSystem.profile.get_settings()
+	for entry in [
+		["总音量", "volume_master"],
+		["音效", "volume_sfx"],
+		["音乐（BGM 待补）", "volume_music"],
+	]:
+		var row := HBoxContainer.new()
+		var label := Label.new()
+		label.text = entry[0]
+		label.custom_minimum_size = Vector2(160, 0)
+		row.add_child(label)
+		var slider := HSlider.new()
+		slider.min_value = 0.0
+		slider.max_value = 1.0
+		slider.step = 0.05
+		slider.value = float(s[entry[1]])
+		slider.custom_minimum_size = Vector2(320, 0)
+		var key := String(entry[1])
+		slider.value_changed.connect(func(v: float):
+			SaveSystem.profile.get_settings()[key] = v
+			AudioManager.apply_settings(SaveSystem.profile.get_settings())
+			SaveSystem.save_game())
+		row.add_child(slider)
+		vbox.add_child(row)
+	var mute := CheckBox.new()
+	mute.text = "静音"
+	mute.button_pressed = bool(s.get("mute", false))
+	mute.toggled.connect(func(on: bool):
+		SaveSystem.profile.get_settings()["mute"] = on
+		AudioManager.apply_settings(SaveSystem.profile.get_settings())
+		SaveSystem.save_game())
+	vbox.add_child(mute)
+	_back_row(vbox)
+	_focus_first()
 
 # ---------------------------------------------------------------- 主菜单
 
@@ -70,6 +118,7 @@ func _build_main() -> void:
 		["梁山远征（爬塔）", _build_expedition],
 		["武 将（养成）", _build_roster],
 		["山 寨（经营）", _build_village],
+		["设 置（音量）", _build_settings],
 	]:
 		var b := Button.new()
 		b.text = entry[0]
@@ -245,6 +294,7 @@ func _build_roster() -> void:
 		star_btn.pressed.connect(func():
 			SaveSystem.profile.spend_item(&"shard", star_cost)
 			Progression.star_up(h, prog)
+			AudioManager.play("sfx_levelup")
 			SaveSystem.save_game()
 			_build_roster())
 		box.add_child(star_btn)
@@ -256,6 +306,7 @@ func _build_roster() -> void:
 		bt_btn.pressed.connect(func():
 			SaveSystem.profile.spend_item(&"breakthrough_mat", 3)
 			Progression.breakthrough(h, prog)
+			AudioManager.play("sfx_unlock")
 			SaveSystem.save_game()
 			_build_roster())
 		box.add_child(bt_btn)
@@ -267,6 +318,7 @@ func _build_roster() -> void:
 		en_btn.pressed.connect(func():
 			SaveSystem.profile.spend_gold(en_cost)
 			Progression.weapon_enhance(h, prog)
+			AudioManager.play("sfx_levelup")
 			SaveSystem.save_game()
 			_build_roster())
 		box.add_child(en_btn)
@@ -280,6 +332,7 @@ func _build_roster() -> void:
 		sk_btn.pressed.connect(func():
 			SaveSystem.profile.spend_item(&"skill_book", sk_cost)
 			Progression.skill_upgrade(h, sid, prog)
+			AudioManager.play("sfx_levelup")
 			SaveSystem.save_game()
 			_build_roster())
 		box.add_child(sk_btn)
@@ -290,6 +343,7 @@ func _build_roster() -> void:
 		var hero_ref := h
 		sw_btn.pressed.connect(func():
 			SignatureWeapon.unlock(hero_ref, SaveSystem.profile)
+			AudioManager.play("sfx_unlock")
 			SaveSystem.save_game()
 			_build_roster())
 		box.add_child(sw_btn)
@@ -310,6 +364,7 @@ func _build_roster() -> void:
 			b.text = "招募 %s %s" % [ud.name, ud.nickname]
 			b.pressed.connect(func():
 				Flow.recruit(SaveSystem.profile, id, DataLoader)
+				AudioManager.play("sfx_unlock")
 				SaveSystem.save_game()
 				_build_roster())
 			list.add_child(b)

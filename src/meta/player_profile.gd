@@ -7,6 +7,16 @@ extends Resource
 @export var items: Dictionary = {}       # 道具：shard（通用碎片）/ skill_book / breakthrough_mat ...
 @export var progress: Dictionary = {}    # {"chapter": 1, "cleared": [level_id...]}
 @export var achievements: Dictionary = {} # 成就 id -> true（如「不战而屈人之兵」）
+@export var settings: Dictionary = {}    # 音量等设置（get_settings 补全默认值）
+
+const DEFAULT_SETTINGS := {"volume_master": 1.0, "volume_sfx": 1.0, "volume_music": 1.0, "mute": false}
+
+## 设置（音量等）：缺省补全默认值
+func get_settings() -> Dictionary:
+	for k in DEFAULT_SETTINGS:
+		if not settings.has(k):
+			settings[k] = DEFAULT_SETTINGS[k]
+	return settings
 
 ## 新档：初始武将（CSV unlock=初始武将：石勇/宋万/杜迁）+ 启动资源（决策日志 D30）
 static func new_default(loader: GameDataLoader) -> PlayerProfile:
@@ -55,6 +65,7 @@ func to_dict() -> Dictionary:
 		"items": items.duplicate(),
 		"progress": progress.duplicate(),
 		"achievements": achievements.duplicate(),
+		"settings": settings.duplicate(),
 	}
 
 static func from_dict(d: Dictionary) -> PlayerProfile:
@@ -65,4 +76,5 @@ static func from_dict(d: Dictionary) -> PlayerProfile:
 	p.items = d.get("items", {}).duplicate()
 	p.progress = d.get("progress", {"chapter": 1, "cleared": []}).duplicate()
 	p.achievements = d.get("achievements", {}).duplicate()
+	p.settings = d.get("settings", {}).duplicate()
 	return p
