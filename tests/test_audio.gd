@@ -56,6 +56,7 @@ func test_event_mapping_no_crash() -> void:
 		{"type": "buff"}, {"type": "status"}, {"type": "collect"}, {"type": "dispel"},
 	]:
 		manager.play_event(e)
+	assert_true(manager.has_sfx("sfx_hit"), "全部事件类型映射执行无异常")
 
 # ---------------------------------------------------------------- 总线与音量设置
 

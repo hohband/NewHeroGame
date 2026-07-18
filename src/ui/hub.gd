@@ -283,6 +283,15 @@ func _build_roster() -> void:
 		var ud := DataLoader.get_unit(id)
 		var box := HBoxContainer.new()
 		box.add_theme_constant_override("separation", 8)
+		# 头像（无图则省略）
+		var ppath := "res://assets/units/portrait/%s.png" % id
+		if ResourceLoader.exists(ppath):
+			var icon := TextureRect.new()
+			icon.texture = load(ppath)
+			icon.custom_minimum_size = Vector2(40, 40)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			box.add_child(icon)
 		var info := Label.new()
 		info.text = "%s %s　Lv.%d　%s星" % [ud.name, ud.nickname, h.level, _stars(h.star)]
 		info.custom_minimum_size = Vector2(200, 0)

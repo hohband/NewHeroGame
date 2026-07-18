@@ -34,6 +34,26 @@ var selected_roster := -1             # 布阵：选中的候选序号（roster_
 var roster_ids: Array[StringName] = []  # 候选池（按档案拥有情况过滤后）
 var _result_shown := false
 var cursor := Vector2i(0, 0)            # 手柄虚拟光标（Deck 适配，M2）
+var _unit_tex: Dictionary = {}          # unit_id -> Texture2D / null（战斗立绘缓存）
+var _portrait_tex: Dictionary = {}      # unit_id -> Texture2D / null（头像缓存）
+
+## 立绘别名：未单独出图的角色复用（杨志 BOSS 复用杨志图，决策日志 D39 注）
+const ART_ALIASES := {&"yang_zhi_boss": &"yang_zhi"}
+
+func _art_id(unit_id: StringName) -> StringName:
+	return ART_ALIASES.get(unit_id, unit_id)
+
+func _unit_texture(id: StringName) -> Texture2D:
+	if not _unit_tex.has(id):
+		var path := "res://assets/units/sprite/%s.png" % _art_id(id)
+		_unit_tex[id] = load(path) if ResourceLoader.exists(path) else null
+	return _unit_tex[id]
+
+func _portrait_texture(id: StringName) -> Texture2D:
+	if not _portrait_tex.has(id):
+		var path := "res://assets/units/portrait/%s.png" % _art_id(id)
+		_portrait_tex[id] = load(path) if ResourceLoader.exists(path) else null
+	return _portrait_tex[id]
 
 func _ready() -> void:
 	position = ORIGIN
@@ -568,13 +588,17 @@ func _draw_deploy() -> void:
 			var rect := Rect2(Vector2(Vector2i(x, y)) * CELL, Vector2(CELL, CELL))
 			draw_rect(rect, Color(0.3, 0.55, 1.0, 0.18))
 			draw_rect(rect, Color(0.3, 0.55, 1.0, 0.5), false, 1.0)
-	# 候选条（稀有度配色 + 姓名；选中的加白圈）
+	# 候选条（头像 + 姓名；选中的加白圈；无图回退稀有度色块）
 	var font := ThemeDB.fallback_font
 	for i in roster_ids.size():
 		var id: StringName = roster_ids[i]
 		var center := Vector2(-360.0, 24.0 + i * 44.0)
 		var ud := DataLoader.get_unit(id)
-		draw_circle(center, 16.0, QUALITY_COLORS.get(ud.quality, Color.GRAY))
+		var p := _portrait_texture(id)
+		if p != null:
+			draw_texture_rect(p, Rect2(center - Vector2(18, 18), Vector2(36, 36)), false)
+		else:
+			draw_circle(center, 16.0, QUALITY_COLORS.get(ud.quality, Color.GRAY))
 		draw_arc(center, 16.0, 0, TAU, 20, Color("263238"), 1.5)
 		var label := ud.name
 		if SaveSystem.profile != null and SaveSystem.profile.has_hero(id):
@@ -604,15 +628,29 @@ func _draw_units() -> void:
 		if not u.is_alive():
 			continue
 		var center := Vector2(u.coords) * CELL + Vector2(CELL, CELL) / 2
-		var body := Color("3A7BD5") if u.team == Unit.Team.PLAYER else Color("9E2B25")
-		if u.team == Unit.Team.NPC_ALLY:
-			body = Color("4E7A3A")
 		if u.is_object:
 			draw_rect(Rect2(center - Vector2(10, 10), Vector2(20, 20)), Color("C9A86A"))
 			draw_rect(Rect2(center - Vector2(10, 10), Vector2(20, 20)), Color("263238"), false, 2.0)
 			continue
-		draw_circle(center, CELL * 0.32, body)
-		draw_arc(center, CELL * 0.32, 0, TAU, 24, Color("263238"), 2.0)
+		var tex := _unit_texture(u.data.unit_id)
+		if tex != null:
+			# 立绘：锚定脚底，朝向向左时水平翻转（D39 注）
+			var h := CELL * 1.35
+			var w := h * tex.get_width() / float(tex.get_height())
+			if u.facing.x < 0:
+				draw_set_transform(center, 0.0, Vector2(-1.0, 1.0))
+				draw_texture_rect(tex, Rect2(Vector2(-w / 2, CELL * 0.30 - h), Vector2(w, h)), false)
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			else:
+				draw_texture_rect(tex, Rect2(Vector2(center.x - w / 2, center.y + CELL * 0.30 - h), Vector2(w, h)), false)
+		else:
+			# 无立绘回退：圆球（NPC 与未出图单位）
+			var body := Color("3A7BD5") if u.team == Unit.Team.PLAYER else Color("9E2B25")
+			if u.team == Unit.Team.NPC_ALLY:
+				body = Color("4E7A3A")
+			draw_circle(center, CELL * 0.32, body)
+			draw_arc(center, CELL * 0.32, 0, TAU, 24, Color("263238"), 2.0)
+			draw_line(center, center + Vector2(u.facing) * CELL * 0.30, Color("F5F1E8"), 3.0)
 		if u.is_elite:
 			draw_arc(center, CELL * 0.36, 0, TAU, 24, Color("C99B3F"), 2.5)   # 精英金圈
 		if u == manager.active_unit:
@@ -621,7 +659,6 @@ func _draw_units() -> void:
 			draw_arc(center, CELL * 0.46, 0, TAU, 24, Color("C99B3F"), 3.0)   # 集火标记（赤金）
 		if u.channeling != null:
 			draw_circle(center + Vector2(0, CELL * 0.42), 5.0, Color("F5F1E8"))   # 引导中标记
-		draw_line(center, center + Vector2(u.facing) * CELL * 0.30, Color("F5F1E8"), 3.0)
 		var bar := Rect2(center + Vector2(-CELL * 0.32, -CELL * 0.46), Vector2(CELL * 0.64, 5))
 		draw_rect(bar, Color("263238"))
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * float(u.hp) / float(u.data.hp), 5)), Color("8FBC4F"))
@@ -644,8 +681,12 @@ func _draw_preview_bar() -> void:
 	for i in seq.size():
 		var u := seq[i]
 		var center := Vector2(x + 14.0, 22.0 + i * 36.0)
-		var body := Color("3A7BD5") if u.team == Unit.Team.PLAYER else Color("9E2B25")
-		draw_circle(center, 12.0, body)
+		var p := _portrait_texture(u.data.unit_id)
+		if p != null:
+			draw_texture_rect(p, Rect2(center - Vector2(12, 12), Vector2(24, 24)), false)
+		else:
+			var body := Color("3A7BD5") if u.team == Unit.Team.PLAYER else Color("9E2B25")
+			draw_circle(center, 12.0, body)
 		draw_arc(center, 12.0, 0, TAU, 20, Color("263238"), 1.5)
 		if i == 0:
 			draw_arc(center, 16.0, 0, TAU, 20, Color.WHITE, 2.5)
