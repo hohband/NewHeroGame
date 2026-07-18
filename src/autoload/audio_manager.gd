@@ -73,9 +73,28 @@ func play(name: String) -> void:
 func has_sfx(name: String) -> bool:
 	return _streams.has(name)
 
-## BGM 预留（素材未到位，阻塞项；到位后放 assets/audio/bgm/ 即可）
-func play_bgm(_name: String) -> void:
-	pass
+var _bgm_name := ""
+
+## BGM 播放（占位 chiptune 已就位，tools/synth_bgm.py；正式曲到货按同名文件替换，D39）
+func play_bgm(name: String) -> void:
+	if _bgm_name == name and _bgm_player.playing:
+		return
+	var path := "res://assets/audio/bgm/%s.wav" % name
+	if not ResourceLoader.exists(path):
+		return   # 该曲目缺失则保持静默
+	_bgm_name = name
+	var stream := AudioStreamWAV.load_from_file(path)
+	if stream == null:
+		return
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = stream.get_data().size() / 2   # 16bit 单声道：字节数 ÷2 = 采样帧数
+	_bgm_player.stream = stream
+	_bgm_player.play()
+
+func stop_bgm() -> void:
+	_bgm_player.stop()
+	_bgm_name = ""
 
 # ---------------------------------------------------------------- 事件映射（战斗/系统）
 

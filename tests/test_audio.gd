@@ -78,3 +78,24 @@ func test_settings_persist_in_profile() -> void:
 	assert_eq(float(p2.settings["volume_sfx"]), 0.5, "音量设置入档（D39 注）")
 	assert_true(p2.settings["mute"])
 	assert_eq(float(p2.get_settings()["volume_master"]), 1.0, "缺省键补默认值")
+
+# ---------------------------------------------------------------- BGM（chiptune 占位，D39 注）
+
+func test_bgm_files_valid() -> void:
+	for name in ["bgm_main", "bgm_battle", "bgm_camp"]:
+		var path := "res://assets/audio/bgm/%s.wav" % name
+		assert_true(FileAccess.file_exists(path), "%s 存在" % name)
+		var stream := AudioStreamWAV.load_from_file(path)
+		assert_not_null(stream)
+		assert_gt(stream.get_length(), 15.0, "%s 有实际长度（可循环曲目）" % name)
+
+func test_play_bgm_sets_looping_stream() -> void:
+	manager.play_bgm("bgm_main")
+	assert_eq(manager._bgm_name, "bgm_main")
+	assert_not_null(manager._bgm_player.stream)
+	assert_eq(manager._bgm_player.stream.loop_mode, AudioStreamWAV.LOOP_FORWARD, "BGM 循环播放")
+	assert_gt(manager._bgm_player.stream.loop_end, 0, "循环终点为全曲末尾")
+	manager.play_bgm("bgm_battle")
+	assert_eq(manager._bgm_name, "bgm_battle", "切曲正常")
+	manager.stop_bgm()
+	assert_eq(manager._bgm_name, "")

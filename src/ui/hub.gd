@@ -7,6 +7,7 @@ func _ready() -> void:
 		SaveSystem.load_game()
 	if SaveSystem.profile != null:
 		AudioManager.apply_settings(SaveSystem.profile.get_settings())
+	AudioManager.play_bgm("bgm_main")
 	_build_main()
 	_focus_first()
 
