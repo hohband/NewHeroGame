@@ -350,6 +350,12 @@ func _on_turn_started(unit: Unit) -> void:
 		reachable = grid.get_reachable(unit, unit.get_move(grid))
 	AudioManager.play("sfx_turn")
 	queue_redraw()
+	# 敌方固定 AI；我方在自动/半自动托管下也由评分 AI 驱动（策划文档 8.5）
+	var ai_driven := unit.team != Unit.Team.PLAYER or manager.auto_mode != BattleManager.AutoMode.MANUAL
+	if ai_driven:
+		await get_tree().create_timer(0.35).timeout
+		if is_instance_valid(manager) and manager.active_unit == unit and manager.state != BattleManager.State.BATTLE_END:
+			manager.run_ai()
 
 ## 指令回放音效（逻辑已瞬时结算，此处纯表现层，决策日志 D39）
 func _on_command_executed(cmd: Command, events: Array) -> void:
@@ -371,12 +377,6 @@ func _on_tick_events(_unit: Unit, events: Array) -> void:
 				AudioManager.play("sfx_heal")
 			"turn_skipped":
 				AudioManager.play("sfx_debuff")
-	# 敌方固定 AI；我方在自动/半自动托管下也由评分 AI 驱动（策划文档 8.5）
-	var ai_driven := unit.team != Unit.Team.PLAYER or manager.auto_mode != BattleManager.AutoMode.MANUAL
-	if ai_driven:
-		await get_tree().create_timer(0.35).timeout
-		if is_instance_valid(manager) and manager.active_unit == unit and manager.state != BattleManager.State.BATTLE_END:
-			manager.run_ai()
 
 func _on_battle_ended(winner: int) -> void:
 	reachable.clear()

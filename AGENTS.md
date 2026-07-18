@@ -20,6 +20,9 @@ godot --headless --path . --import
 
 # 运行游戏（主界面 hub；战斗操作见场景注释）
 godot --path .
+
+# 战斗场景冒烟（scene 直跑，覆盖 hub 之外的战斗路径；改 battle.gd 后必跑）
+godot --headless --path . res://scenes/battle/battle.tscn --quit-after 60
 ```
 
 ## 工程红线（详见 docs/水浒战棋-开发计划.md 第六章）
