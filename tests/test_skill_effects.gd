@@ -202,6 +202,9 @@ func test_all_csv_skills_executable() -> void:
 		var s: SkillData = loader.skills[id]
 		if id in [&"generic_melee", &"generic_ranged"]:
 			continue
+		# 被动无手动目标、走自动触发管线（PassiveSystem），其可执行性由 test_passive_skills 覆盖
+		if s.type == &"passive":
+			continue
 		# 每个技能都在干净状态下尝试：回位、满怒、清冷却、敌方复位
 		grid.move_unit(ctx_unit, Vector2i(4, 4))
 		ctx_unit.rage = 100

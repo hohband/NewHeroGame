@@ -11,7 +11,7 @@ func test_batch2_loaded() -> void:
 	for id in [&"xu_ning", &"zhang_shun", &"wang_ying", &"gong_wang", &"ding_desun", &"yan_qing"]:
 		assert_not_null(loader.get_unit(id), "%s 已实装" % id)
 	assert_eq(loader.units.size(), 38, "24+6 将 + 8 敌方（含 2 教学新兵）")
-	assert_eq(loader.skills.size(), 34, "技能表 +6")
+	assert_eq(loader.skills.size(), 94, "技能表 +6 主动/绝技 +60 被动（30 将 × 2）")
 
 func test_bond_gaps_filled() -> void:
 	# 原先的预留羁绊缺口全部闭环（5.6：优先补首批标注「预留」的羁绊缺口）

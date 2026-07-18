@@ -48,6 +48,24 @@ func test_in_attack_range_manhattan() -> void:
 	grid.move_unit(enemy, Vector2i(2, 0))
 	assert_false(manager.in_attack_range(hero, enemy), "近战范围 1，距离 2 不可攻击")
 
+func test_in_attack_range_hill_range_mod() -> void:
+	hero.data.range_min = 2
+	hero.data.range_max = 2
+	grid.move_unit(enemy, Vector2i(3, 0))
+	assert_false(manager.in_attack_range(hero, enemy), "距离 3 超出射程 2")
+	grid.set_terrain(Vector2i(0, 0), &"hill")
+	assert_true(manager.in_attack_range(hero, enemy), "山地 range_mod +1，射程上限 2→3")
+	grid.move_unit(enemy, Vector2i(1, 0))
+	assert_false(manager.in_attack_range(hero, enemy), "射程下限不受地形影响")
+
+func test_enemies_in_range_excludes_npc_ally() -> void:
+	var npc: Unit = autofree(UnitFactory.make_unit(0, 0, 40, Unit.Team.NPC_ALLY, Vector2i(1, 0)))
+	grid.place_unit(npc, Vector2i(1, 0))
+	manager.units.append(npc)
+	grid.move_unit(enemy, Vector2i(0, 1))
+	assert_true(manager.enemies_in_range(hero).has(enemy))
+	assert_false(manager.enemies_in_range(hero).has(npc), "NPC 友军不列为可普攻目标（与高亮/点击口径一致）")
+
 func test_battle_ends_when_side_wiped() -> void:
 	watch_signals(manager)
 	enemy.take_damage(99999)

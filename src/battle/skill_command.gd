@@ -24,6 +24,9 @@ func execute(battle: BattleManager) -> Array:
 		return []
 	# 先扣怒气再结算（击杀等收益在释放后自然累积，决策日志 D25）
 	actor.gain_rage(-skill.rage_cost)
+	# 施放技能回怒（策划文档 6.5，battle_constants.csv: rage_on_skill）；
+	# 与效果串自带的 rage() 语义不同（普攻 +20 走效果串），不重复计
+	actor.gain_rage(int(battle.data.get_constant("rage_on_skill", 10.0)))
 	var events: Array = []
 	var killed_any := false
 	# 技能等级效果倍率（养成系统：无档案为 1.0）与专武形态质变（D35）
@@ -45,7 +48,7 @@ func execute(battle: BattleManager) -> Array:
 		if eff["name"] == "refresh_on_kill" and killed_any:
 			actor.extra_action_pending = true
 		if eff["name"] == "extra_action":
-			# 令 AV 最高（即将行动）的 n 名友军再动（表15：给「下回合行动价值最高」的队友）
+			# 令 AV 最小（即将行动）的 n 名友军再动（表15「下回合行动价值最高」以 AV 最小代理，决策日志 D27）
 			var n := int(eff["args"][0])
 			var allies: Array[Unit] = []
 			for t in targets:

@@ -8,8 +8,9 @@ func _initialize() -> void:
 	loader.load_all()
 	var errors := loader.validate()
 	if errors.is_empty():
-		print("✓ 数据校验通过：%d 武将 / %d 技能 / %d 地形 / %d 预留" % [
-			loader.units.size(), loader.skills.size(), loader.terrains.size(), loader.reserved.size()])
+		print("✓ 数据校验通过：%d 武将 / %d 技能 / %d 地形 / %d 武器 / %d 道具 / %d 预留 / %d 战斗常数" % [
+			loader.units.size(), loader.skills.size(), loader.terrains.size(), loader.weapons.size(),
+			loader.items.size(), loader.reserved.size(), loader.constants.size()])
 	else:
 		printerr("✗ 数据校验未通过（%d 项）：" % errors.size())
 		for e in errors:

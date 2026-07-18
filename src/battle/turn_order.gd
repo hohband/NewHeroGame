@@ -2,7 +2,7 @@ class_name TurnOrder
 extends RefCounted
 ## CTB 速度排队（策划文档 6.4）：AV = 1000 ÷ 速度；全体 AV 同时递减，归零者行动，行动后重置自身 AV。
 ## 同刻归零平局（决策日志 D3）：速度高者优先 → 我方优先 → unit_id 字典序。
-## 加速/减速/再动 = 直接修改单位 AV（戴宗技能等，后续接入）。
+## 加速/减速/再动 = 直接修改单位 AV（av_mod 见 EffectSystem，extra_action 见 SkillCommand，均已接入）。
 
 var _ready: Array[Unit] = []
 

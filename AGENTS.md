@@ -31,7 +31,7 @@ mkdir -p build/windows && godot --headless --path . --export-release "Windows De
 
 ## 工程红线（详见 docs/水浒战棋-开发计划.md 第六章）
 
-1. **CSV 是唯一数据源**：数值只改 `data/*.csv`，禁止代码硬编码；`docs/System/` 的 CSV 是设计快照，不要改、不要以它为准。**注意：六张数据表的 .import 固定为 `importer="keep"`（被 csv_translation 导入器改写会导致导出包丢原始 CSV，D40 注）。**
+1. **CSV 是唯一数据源**：数值只改 `data/*.csv`，禁止代码硬编码；`docs/System/` 的 CSV 是设计快照，不要改、不要以它为准。**注意：九张数据表（含 battle_constants.csv 战斗常数表、weapons.csv 武器范围模板表、items.csv 道具表）的 .import 固定为 `importer="keep"`（被 csv_translation 导入器改写会导致导出包丢原始 CSV，D40 注）。**
 2. **逻辑与表现分离**：逻辑层（`src/battle/` 除 battle.gd 外）不依赖场景显示；指令执行瞬时结算，表现事件排队回放。
 3. **指令管道统一**：玩家输入与 AI 都生成 `Command` 子类，经 `BattleManager.submit_command()` 执行。
 4. **技能零程序介入**：新技能 = skills.csv 加一行拼原子效果；新原子效果才动 `EffectSystem`，并同步数据表说明的词表。
@@ -51,9 +51,9 @@ mkdir -p build/windows && godot --headless --path . --export-release "Windows De
 data/       CSV 数据表（唯一数据源）+ reserved_units.txt 预留武将名单
 src/
   autoload/ DataLoader（GameDataLoader）
-  data/     UnitData / SkillData / TerrainData（Resource）
+  data/     UnitData / SkillData / TerrainData / ItemData（Resource）
   battle/   战斗逻辑层：Grid/Unit/Buff/TurnOrder/DamageCalculator/EffectSystem/Targeting/
-            Command（Move/Attack/Skill/Wait）/BattleManager/RollSource
+            Command（Move/Attack/Skill/Wait/Interact/Item）/BattleManager/RollSource/PassiveSystem（被动触发）
   tools/    命令行工具（数据校验等）
 scenes/battle/  调试战斗场景（占位表现）
 tests/      GUT 单元测试

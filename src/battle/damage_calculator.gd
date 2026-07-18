@@ -2,8 +2,9 @@ class_name DamageCalculator
 extends RefCounted
 ## 伤害与命中结算（策划文档 6.6 及修正表）：
 ##   基础伤害 = 攻击 × 技能倍率 × 100 ÷ (100 + 目标防御)
-##   最终伤害 = 基础伤害 × 暴击(1.5) × (1 + 方位 + 高低差 + 光环)
+##   最终伤害 = 基础伤害 × 暴击(1.5) × (1 + 方位 + 高低差)
 ## 同类百分比加成相加而非叠乘（决策日志 D6）；闪避 = 完全免伤；格挡 = 减伤 30%。
+## 光环经属性 % 生效（Unit._with_mods），不进本公式。
 
 const CRIT_MULT := 1.5
 const BLOCK_REDUCE := 0.3
@@ -14,7 +15,7 @@ const LOW_GROUND_MOD := -0.10
 
 ## 结算一次攻击。返回 {hit, dodged, blocked, crit, amount, dir_mod, height_mod}。
 ## rolls 可注入固定序列的随机源以便测试；sure_hit = true 时跳过闪避判定（百步穿杨）。
-static func compute(attacker: Unit, target: Unit, multiplier: float, grid: Grid, rolls: RollSource, aura_mod: float = 0.0, sure_hit: bool = false, attack_value: int = -1) -> Dictionary:
+static func compute(attacker: Unit, target: Unit, multiplier: float, grid: Grid, rolls: RollSource, sure_hit: bool = false, attack_value: int = -1) -> Dictionary:
 	var result := {
 		"hit": true, "dodged": false, "blocked": false, "crit": false,
 		"amount": 0, "dir_mod": 0.0, "height_mod": 0.0,
@@ -30,7 +31,7 @@ static func compute(attacker: Unit, target: Unit, multiplier: float, grid: Grid,
 	result["height_mod"] = height_mod
 	var atk_value := attacker.get_atk(grid) if attack_value < 0 else attack_value   # mgc_dmg 传入谋略（决策日志 D27）
 	var base := float(atk_value) * multiplier * 100.0 / float(100 + target.get_def(grid))
-	var amount := base * (1.0 + dir_mod + height_mod + aura_mod)
+	var amount := base * (1.0 + dir_mod + height_mod)
 	if rolls.roll() < float(attacker.get_crit()):
 		result["crit"] = true
 		amount *= CRIT_MULT

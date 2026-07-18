@@ -95,12 +95,14 @@ func _run_once(loader: GameDataLoader, level: LevelConfig, seed_value: int) -> D
 				if e.get("type") in ["collect", "status", "turn_skipped"]:
 					print("  [事件] ", e.get("type"), " ", e.get("unit", e.get("target", "?")).data.unit_id if (e.get("unit", e.get("target")) != null) else ""))
 		m.unit_died.connect(func(u): print("  [阵亡] ", u.data.unit_id))
-	# 必出之外用候选池前若干名补满
+	# 必出之外用候选池前若干名补满（限定职业关只补允许职业，6.8）
 	var cells := m._free_deploy_cells()
 	var slots: int = level.max_deploy - m.deployed.size()
 	for id in level.roster:
 		if slots <= 0 or cells.is_empty():
 			break
+		if not m.is_class_allowed(id):
+			continue
 		m.deploy_unit(id, cells.pop_front(), profile.get_hero(id))
 		slots -= 1
 	m.confirm_deploy()

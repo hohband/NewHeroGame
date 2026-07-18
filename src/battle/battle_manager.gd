@@ -14,7 +14,7 @@ signal round_started(round_count: int)
 signal dialogue(text: String)
 signal deploy_changed
 
-enum State { DEPLOY, IDLE, MOVE_PREVIEW, TARGETING, EXECUTING, AI_TURN, BATTLE_END }
+enum State { DEPLOY, IDLE, EXECUTING, AI_TURN, BATTLE_END }
 ## 自动托管模式（策划文档 8.5）：手动 / 半自动（绝技按表16条件释放）/ 全自动
 enum AutoMode { MANUAL, SEMI, FULL }
 
@@ -27,10 +27,19 @@ var state: State = State.DEPLOY
 var active_unit: Unit = null
 var move_used := false
 var action_used := false
+## 本次激活剩余移动力：激活时 = 单位移动力，移动按路径地形消耗扣减（策划 6.5 移动可拆两段）
+var move_points_left := 0
+## 激活窗口标记：仅 advance_turn → finish_turn 之间为 true；窗口外的脚本化移动不校验移动力
+var _activation_live := false
 var auto_mode: AutoMode = AutoMode.MANUAL
 var focus_target: Unit = null   # 集火目标：AI 评分 +100（8.5）
 var pvp_mods: Dictionary = {}   # PVP 守方策略模板修正（8.6，仅作用于敌方 AI）
 var pvp_core: Unit = null       # 「保护核心」模板的核心单位
+
+# ---- 道具栏（策划 6.5「道具：每局限用次数」）----
+## 本场道具剩余次数：item_id(StringName) -> int。默认标准道具栏（items.csv 全员可用），
+## meta/背包经 set_item_stock() 覆盖；AI 不使用道具。
+var item_stock: Dictionary = {}
 
 # ---- 关卡系统（LevelConfig，策划文档 6.8/6.9）----
 var level: LevelConfig = null
@@ -52,6 +61,7 @@ func setup(p_data: GameDataLoader, p_grid: Grid, p_units: Array[Unit]) -> void:
 	units = p_units
 	for u in units:
 		u.died.connect(_on_unit_died)
+	init_item_stock()
 
 func set_seed(value: int) -> void:
 	if rolls is RandomRollSource:
@@ -80,6 +90,7 @@ func setup_level(p_data: GameDataLoader, p_level: LevelConfig) -> void:
 	for spec in level.objects:
 		_spawn_object(spec)
 	_triggers = level.triggers.duplicate(true)
+	init_item_stock()
 	change_state(State.DEPLOY)
 	# 必出武将自动落位（部署区从前到后）
 	var auto_cells := _free_deploy_cells()
@@ -122,8 +133,29 @@ func spawn_from_spec(spec: Dictionary, default_team: Unit.Team) -> Unit:
 		u.is_elite = true
 		boss_unit = u
 	add_unit(u)
-	grid.place_unit(u, spec["coords"])
+	grid.place_unit(u, _standable_cell_near(spec["coords"], u))
 	return u
+
+## 生成落点修正：指定格被占/不可站立时外扩找最近可站立格（触发器增援叠到站立单位会破坏棋盘占位不变量）；
+## 全图无空位时退回原格（维持原行为）。
+func _standable_cell_near(coords: Vector2i, u: Unit) -> Vector2i:
+	if grid.can_stop(coords, u):
+		return coords
+	var visited := {coords: true}
+	var frontier: Array[Vector2i] = [coords]
+	while not frontier.is_empty():
+		var next: Array[Vector2i] = []
+		for c in frontier:
+			for d in Grid.DIRS:
+				var n: Vector2i = c + d
+				if visited.has(n) or not grid.is_inside(n):
+					continue
+				visited[n] = true
+				if grid.can_stop(n, u):
+					return n
+				next.append(n)
+		frontier = next
+	return coords
 
 ## 场景物件（生辰纲担等）：静态、不行动、不计入胜负
 func _spawn_object(spec: Dictionary) -> Unit:
@@ -156,6 +188,24 @@ func can_deploy_at(coords: Vector2i) -> bool:
 	var cell := grid.get_cell(coords)
 	return cell != null and not cell.is_blocked() and cell.occupant == null
 
+## 职业限定校验（策划 6.8「限定职业上阵」）：allowed_classes 为空 = 不限
+func is_class_allowed(unit_id: StringName) -> bool:
+	if level == null or level.allowed_classes.is_empty():
+		return true
+	var ud := data.get_unit(unit_id)
+	return ud != null and level.allowed_classes.has(String(ud.unit_class))
+
+## 布阵阶段可见的敌方单位（迷雾关敌情不明：布阵阶段不暴露敌方阵容/危险范围；
+## 仅信息隐藏，敌方单位仍正常落位，开战后 units 照常使用）
+func deploy_intel_enemies() -> Array[Unit]:
+	var out: Array[Unit] = []
+	if level == null or level.fog:
+		return out
+	for u in units:
+		if u.team == Unit.Team.ENEMY and not u.is_object and u.is_alive():
+			out.append(u)
+	return out
+
 ## 布阵：上阵/调整位置。名额与必出校验在 confirm_deploy。
 ## 传入 hero 时按养成进度生成战斗数值（Progression.compute_unit_data）。
 func deploy_unit(unit_id: StringName, coords: Vector2i, hero: Hero = null) -> Unit:
@@ -167,6 +217,9 @@ func deploy_unit(unit_id: StringName, coords: Vector2i, hero: Hero = null) -> Un
 		return null
 	if deployed.size() >= level.max_deploy:
 		push_error("布阵：上阵人数已达上限 %d" % level.max_deploy)
+		return null
+	if not is_class_allowed(unit_id):
+		push_error("布阵：%s 非本关限定职业，不可上阵" % unit_id)
 		return null
 	var ud := data.get_unit(unit_id)
 	if hero != null:
@@ -226,6 +279,8 @@ func change_state(new_state: State) -> void:
 func submit_command(cmd: Command) -> Array:
 	change_state(State.EXECUTING)
 	var events := cmd.execute(self)
+	# 被动触发（策划 4.3）：on_attack / on_hit 随指令结算并入同一事件队列回放
+	events.append_array(PassiveSystem.after_command(self, cmd, events))
 	command_executed.emit(cmd, events)
 	_fan_out_trigger_events(cmd, events)
 	if state != State.BATTLE_END:
@@ -304,8 +359,14 @@ func advance_turn() -> void:
 	if active_unit.channeling != null:
 		var channel_events := _complete_collect(active_unit)
 		tick_events.emit(active_unit, channel_events)
+	# 被动：turn_start（策划 4.3；在移动力结算之前触发，本激活即可吃到 move 增益）
+	var passive_events := PassiveSystem.at_turn_start(self, active_unit)
+	if not passive_events.is_empty():
+		tick_events.emit(active_unit, passive_events)
 	move_used = false
 	action_used = false
+	move_points_left = active_unit.get_move(grid)
+	_activation_live = true
 	change_state(State.AI_TURN if active_unit.team != Unit.Team.PLAYER else State.IDLE)
 	turn_started.emit(active_unit)
 
@@ -359,6 +420,8 @@ func finish_turn() -> void:
 		if u.is_alive():
 			_round_actors[u] = true
 	active_unit = null
+	move_points_left = 0
+	_activation_live = false
 	_check_round_complete()
 	advance_turn()
 
@@ -634,18 +697,58 @@ func _apply_regen(a: Dictionary) -> void:
 	b.dispellable = false
 	u.add_buff(b)
 
+# ---------------------------------------------------------------- 移动（策划 6.5：移动可拆两段，按剩余移动力结算）
+
+## 本激活内是否还能移动：须为当前激活单位、剩余移动力 > 0 且未被束缚。
+func can_move(unit: Unit) -> bool:
+	return unit != null and unit == active_unit and move_points_left > 0 and unit.can_move()
+
+## 按剩余移动力计算可达格（复用 Grid.get_reachable，传剩余点数）；不可移动时返回空。
+func reachable_cells(unit: Unit) -> Dictionary:
+	if not can_move(unit):
+		return {}
+	return grid.get_reachable(unit, move_points_left)
+
 # ---------------------------------------------------------------- 攻击辅助
 
-## 攻击范围：曼哈顿距离区间（武器范围模板后续细化，决策日志 D9）。
+## 攻击范围：按武器范围模板（weapons.csv，策划 6.5；决策日志 D9 的细化落地）。
+## line = 四方向直线 range_min..range_max 格（只看格子在直线上，不做遮挡判定）；
+## adjacent/diamond = 曼哈顿区间（与 Targeting 口径一致；未登记武器由 get_weapon_shape 告警并退回 diamond）。
+## 射程上限附加攻击者脚下地形的 range_mod（山地 +1，地形表）；下限不变。
 func in_attack_range(attacker: Unit, target: Unit) -> bool:
-	var dist := absi(attacker.coords.x - target.coords.x) + absi(attacker.coords.y - target.coords.y)
-	return dist >= attacker.data.range_min and dist <= attacker.data.range_max
+	return in_attack_range_from(attacker, attacker.coords, target.coords)
 
+## 从指定起点格判定的攻击范围（AI 枚举假想落点用）；range_mod 按起点格地形。
+func in_attack_range_from(attacker: Unit, from: Vector2i, target_coords: Vector2i) -> bool:
+	var range_max := attacker.data.range_max
+	var cell := grid.get_cell(from)
+	if cell != null:
+		range_max += cell.terrain.range_mod
+	var d := target_coords - from
+	var man := absi(d.x) + absi(d.y)
+	if data.get_weapon_shape(attacker.data.weapon) == &"line":
+		return (d.x == 0 or d.y == 0) and man >= attacker.data.range_min and man <= range_max
+	return man >= attacker.data.range_min and man <= range_max
+
+## 可普攻目标列表：只认 ENEMY 队（与 battle.gd 点击判定一致，NPC 友军不可普攻）。
 func enemies_in_range(attacker: Unit) -> Array[Unit]:
 	var out: Array[Unit] = []
 	for u in units:
-		if u.is_alive() and u.team != attacker.team and not u.collectable and in_attack_range(attacker, u):
+		if u.is_alive() and u.team == Unit.Team.ENEMY and not u.collectable and in_attack_range(attacker, u):
 			out.append(u)
+	return out
+
+## 普攻可否打到指定格的可破坏障碍（拒马，策划文档 6.3）：射程规则同 in_attack_range。
+func in_obstacle_range(attacker: Unit, coords: Vector2i) -> bool:
+	return in_attack_range_from(attacker, attacker.coords, coords)
+
+## 射程内的可破坏障碍格列表（obstacle_hp > 0 即 destructible，见 Grid.setup）。
+func obstacles_in_range(attacker: Unit) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for coords: Vector2i in grid.cells:
+		var cell: GridCell = grid.cells[coords]
+		if cell.has_obstacle() and in_obstacle_range(attacker, coords):
+			out.append(coords)
 	return out
 
 ## 普攻选择：远程单位（range_min >= 2）用 generic_ranged，否则 generic_melee。
@@ -659,6 +762,33 @@ func basic_attack_skill(unit: Unit) -> SkillData:
 ## 技能可用性：怒气足够且不在冷却中。
 func can_use_skill(unit: Unit, skill: SkillData) -> bool:
 	return unit.rage >= skill.rage_cost and unit.skill_cooldown(skill.skill_id) <= 0
+
+# ---------------------------------------------------------------- 道具（策划 6.5：每局限用次数）
+
+## 初始化标准道具栏：items.csv 每行全员可用，次数 = uses_per_battle（装载战斗时调用）。
+func init_item_stock() -> void:
+	item_stock = data.default_item_stock() if data != null else {}
+
+## meta/背包对接接口：以存档道具库存覆盖本场道具栏（items.csv 之外的 id 忽略并告警）。
+func set_item_stock(stock: Dictionary) -> void:
+	item_stock.clear()
+	for id in stock:
+		if data != null and data.items.has(id):
+			item_stock[id] = maxi(0, int(stock[id]))
+		else:
+			push_warning("BattleManager: set_item_stock 忽略未登记道具 '%s'" % id)
+
+func item_uses_left(item_id: StringName) -> int:
+	return int(item_stock.get(item_id, 0))
+
+## 道具可用性：存活、本激活尚未行动（行动口径同攻击/技能）、剩余次数 > 0。
+func can_use_item(unit: Unit, item: ItemData) -> bool:
+	return unit != null and item != null and unit.is_alive() and not action_used \
+		and item_uses_left(item.item_id) > 0
+
+## 消耗一次道具使用次数（ItemCommand 调用）。
+func consume_item(item_id: StringName) -> void:
+	item_stock[item_id] = maxi(0, item_uses_left(item_id) - 1)
 
 # ---------------------------------------------------------------- 评分制 AI（策划文档第八章）
 

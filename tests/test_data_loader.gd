@@ -9,7 +9,7 @@ func before_each() -> void:
 
 func test_loads_all_tables() -> void:
 	assert_eq(loader.units.size(), 38, "24+6 名武将 + 8 名敌方/剧情单位（enemies.csv）")
-	assert_eq(loader.skills.size(), 34, "28 个技能 + 第二批 6 个")
+	assert_eq(loader.skills.size(), 94, "28 个技能 + 第二批 6 个 + 60 被动（30 将 × 2）")
 	assert_eq(loader.terrains.size(), 9, "8 种地形 + 酒摊互动格")
 
 func test_bom_stripped() -> void:

@@ -70,7 +70,7 @@ func test_exp_to_deployed_heroes() -> void:
 	var h := profile.get_hero(&"shi_yong")
 	assert_not_null(h)
 	# 构造一个带档案的上阵单位
-	var u := Unit.new()
+	var u: Unit = autofree(Unit.new())
 	u.setup(loader.get_unit(&"shi_yong"), Unit.Team.PLAYER, Vector2i.ZERO)
 	u.hero = h
 	var s := Flow.apply_battle_result(profile, level, _result(), [u], loader)

@@ -103,7 +103,7 @@ func test_fengxue_kill_grants_extra_action() -> void:
 	var m := _manager([lc, enemy])
 	m.submit_command(SkillCommand.new(lc, loader.get_skill(&"ult_fengxue"), Vector2i(4, 3)))
 	assert_true(lc.extra_action_pending, "击杀刷新行动（refresh_on_kill，决策日志 D22）")
-	assert_eq(lc.rage, 30, "绝技扣 100 怒气，击杀 +30")
+	assert_eq(lc.rage, 40, "绝技扣 100 怒气，施放 +10（策划 6.5），击杀 +30")
 
 func test_fengxue_requires_rage() -> void:
 	var lc := _csv_unit(&"lin_chong", Unit.Team.PLAYER, Vector2i(4, 4))

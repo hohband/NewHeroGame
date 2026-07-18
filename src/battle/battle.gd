@@ -1,8 +1,8 @@
 extends Node2D
 ## 调试战斗场景（M1）：布阵阶段 → CTB 战斗循环，全部内容经 LevelConfig 驱动。
 ## 布阵：左键点候选（左侧竖条，稀有度配色）→ 点部署区空格上阵；点已上阵单位撤下；回车开战。
-## 战斗：左键移动/普攻，Q 主动技 / W 绝技（line 技能点击指向，ESC/右键取消），空格待机，
-## 　　　1/2/3 手动/半自动/全自动，F 集火。占位表现，正式 UI 在 M2 替换（决策日志 D12/D28）。
+## 战斗：左键移动/普攻，Q 主动技 / W 绝技（line 技能点击指向，ESC/右键取消），R 道具（数字键选择→点目标），
+## 　　　空格待机，1/2/3 手动/半自动/全自动，F 集火。占位表现，正式 UI 在 M2 替换（决策日志 D12/D28）。
 
 const CELL := 64
 const ORIGIN := Vector2(320, 40)
@@ -25,11 +25,18 @@ const QUALITY_COLORS := {
 	&"blue": Color("3A7BD5"),
 	&"green": Color("8FBC4F"),
 }
+## 职业中文名（数据表说明：限定职业布阵提示用）
+const CLASS_NAMES := {
+	&"vanguard": "先锋", &"infantry": "步军", &"cavalry": "马军", &"archer": "神射",
+	&"strategist": "谋士", &"healer": "医者", &"support": "辅助",
+}
 
 var grid: Grid
 var manager: BattleManager
 var reachable: Dictionary = {}
 var pending_skill: SkillData = null   # 已选择、等待指向的技能（line 类）
+var _item_menu_open := false          # 道具列表展开中（R 开关）
+var _pending_item: ItemData = null    # 已选择、等待点选目标的道具
 var selected_roster := -1             # 布阵：选中的候选序号（roster_ids 下标）
 var roster_ids: Array[StringName] = []  # 候选池（按档案拥有情况过滤后）
 var _result_shown := false
@@ -42,6 +49,7 @@ var _hint_label: Label                  # 当前情境操作提示
 var _msg_label: Label                   # 底部消息条（剧情/教学/系统提示，最近 2 条）
 var _start_button: Button               # 开始战斗（布阵阶段）
 var _back_button: Button                # 返回山寨
+var _item_panel: Label                  # 道具列表（R 展开，含剩余次数）
 var _messages: Array[String] = []
 var _unit_tex: Dictionary = {}          # unit_id -> Texture2D / null（战斗立绘缓存）
 var _portrait_tex: Dictionary = {}      # unit_id -> Texture2D / null（头像缓存）
@@ -85,6 +93,9 @@ func _ready() -> void:
 		manager.apply_profile_to_deployed(SaveSystem.profile)
 	grid = manager.grid
 	roster_ids = level.roster.filter(func(id): return SaveSystem.profile == null or SaveSystem.profile.has_hero(id))
+	# 限定职业（6.8）：候选条只显示允许职业（逻辑层 deploy_unit 另有硬校验）
+	if not level.allowed_classes.is_empty():
+		roster_ids = roster_ids.filter(func(id): return level.allowed_classes.has(String(DataLoader.get_unit(id).unit_class)))
 	manager.turn_started.connect(_on_turn_started)
 	manager.command_executed.connect(_on_command_executed)
 	manager.tick_events.connect(_on_tick_events)
@@ -118,6 +129,13 @@ func _build_ui() -> void:
 	_msg_label.size = Vector2(1050, 60)
 	_msg_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_ui.add_child(_msg_label)
+	# 道具列表（R 展开）：棋盘左侧留白处，含剩余次数
+	_item_panel = Label.new()
+	_item_panel.position = Vector2(12, 430)
+	_item_panel.size = Vector2(300, 190)
+	_item_panel.add_theme_color_override("font_color", Color("C9A86A"))
+	_item_panel.visible = false
+	_ui.add_child(_item_panel)
 	_start_button = Button.new()
 	_start_button.text = "开始战斗 ▶"
 	_start_button.position = Vector2(1120, 640)
@@ -159,7 +177,16 @@ func _update_ui_state() -> void:
 	_start_button.disabled = manager.deployed.is_empty()
 	queue_redraw()
 	if in_deploy:
-		_hint_label.text = "布阵：点左侧候选 → 点部署区上阵；点已上阵（非必出）撤下；就绪后点「开始战斗」"
+		var deploy_hint := "布阵：点左侧候选 → 点部署区上阵；点已上阵（非必出）撤下；就绪后点「开始战斗」"
+		# 特殊关卡机制提示（6.8）：迷雾敌情不明 / 限定职业上阵
+		if manager.level.fog:
+			deploy_hint = "【迷雾：敌情不明】敌方阵容与危险范围不可见。" + deploy_hint
+		if not manager.level.allowed_classes.is_empty():
+			var names: Array[String] = []
+			for c in manager.level.allowed_classes:
+				names.append(String(CLASS_NAMES.get(StringName(c), c)))
+			deploy_hint = "【限定职业：%s】" % "、".join(names) + deploy_hint
+		_hint_label.text = deploy_hint
 	elif manager.state == BattleManager.State.BATTLE_END:
 		_hint_label.text = ""
 
@@ -236,9 +263,15 @@ func _deploy_at_cell(cell_coords: Vector2i) -> void:
 		AudioManager.play("sfx_ui_click")
 		return
 	if selected_roster != -1:
+		# 失败原因进消息条（部署失败此前只打控制台，玩家以为点击无效）
+		if manager.deployed.size() >= manager.level.max_deploy:
+			_push_message("上阵人数已达上限 %d：先点一名非必出的已上阵单位撤下" % manager.level.max_deploy)
+			return
 		var id: StringName = roster_ids[selected_roster]
 		var hero := SaveSystem.profile.get_hero(id) if SaveSystem.profile != null else null
-		manager.deploy_unit(id, cell_coords, hero)
+		if manager.deploy_unit(id, cell_coords, hero) == null:
+			_push_message("该格不可部署")
+			return
 		AudioManager.play("sfx_ui_click")
 		selected_roster = -1
 
@@ -271,9 +304,11 @@ func _roster_index_at(pos: Vector2) -> int:
 			return i
 	return -1
 
+## 候选条单列容量（超出后向右分列，避免底部画出屏幕外：日常 24 候选 / 演武场全阵容）
+const ROSTER_ROWS := 13
 ## 候选条位置：棋盘左侧留白居中（随 ORIGIN 自适应，试玩反馈：写死 -360 会画出屏幕外）
 func _roster_center(i: int) -> Vector2:
-	return Vector2(160.0 - ORIGIN.x, 24.0 + i * 44.0)
+	return Vector2(160.0 - ORIGIN.x + (i / ROSTER_ROWS) * 150.0, 24.0 + (i % ROSTER_ROWS) * 44.0)
 
 func _pos_to_cell(pos: Vector2) -> Vector2i:
 	return Vector2i(floori(pos.x / CELL), floori(pos.y / CELL))
@@ -287,8 +322,21 @@ func _handle_battle_input(event: InputEvent) -> void:
 		_handle_cell_click(cursor)
 		return
 	if event.is_action_pressed("battle_cancel"):
-		pending_skill = null
-		queue_redraw()
+		_cancel_targeting()
+		return
+	# R：道具列表（展开后数字键选择 → 点选目标；仅我方激活且未行动时可开）
+	if event is InputEventKey and event.pressed and event.keycode == KEY_R:
+		var u := manager.active_unit
+		if _item_menu_open or _pending_item != null:
+			_close_item_menu()
+		elif u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE and not manager.action_used:
+			_open_item_menu()
+		return
+	# 道具流程中数字键优先（优先于 1/2/3 托管切换）：列表展开时选择道具，点选目标时忽略
+	if (_item_menu_open or _pending_item != null) and event is InputEventKey and event.pressed \
+			and event.keycode >= KEY_1 and event.keycode <= KEY_9:
+		if _item_menu_open:
+			_select_item_by_index(event.keycode - KEY_1)
 		return
 	if event.is_action_pressed("battle_skill"):
 		var u := manager.active_unit
@@ -352,18 +400,17 @@ func _handle_battle_input(event: InputEvent) -> void:
 				_push_message("集火目标：%s（再次按 F 取消）" % cell.occupant.display_name())
 		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		pending_skill = null
-		queue_redraw()
+		_cancel_targeting()
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
-		pending_skill = null
-		queue_redraw()
+		_cancel_targeting()
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		_handle_cell_click(_mouse_cell())
 
 ## Q = 主动技，W = 绝技（怒气 100）。需要指向的技能（line）进入待指向状态，其余直接施放。
 func _try_skill(u: Unit, is_ult: bool) -> void:
+	_close_item_menu()   # 技能与道具互斥（同为行动）
 	var skill := DataLoader.get_skill_for_unit(u.data.unit_id, &"ult" if is_ult else &"active")
 	if skill == null:
 		_push_message("%s 没有%s" % [u.display_name(), "绝技" if is_ult else "主动技"])
@@ -391,6 +438,77 @@ func _try_interact(u: Unit) -> void:
 			return
 	_push_message("没有相邻可夺取的物件（走到相邻格按 E）")
 
+# ---------------------------------------------------------------- 道具（策划 6.5，R 键）
+
+## 展开道具列表：含每件道具的剩余次数；空栏直接提示
+func _open_item_menu() -> void:
+	if manager.item_stock.is_empty():
+		_push_message("本场没有可用道具")
+		return
+	pending_skill = null
+	_item_menu_open = true
+	_refresh_item_panel()
+	_hint_label.text = "道具：数字键选择 / R 收起"
+
+func _close_item_menu() -> void:
+	_item_menu_open = false
+	_pending_item = null
+	if _item_panel != null:
+		_item_panel.visible = false
+	_update_battle_hint()
+	queue_redraw()
+
+## 刷新道具列表文本（名称 + 剩余次数 + 描述）
+func _refresh_item_panel() -> void:
+	var lines: Array[String] = ["—— 道具（每局限用）——"]
+	var i := 1
+	for id in manager.item_stock:
+		var it := DataLoader.get_item(id)
+		lines.append("%d. %s ×%d　%s" % [i, it.name, manager.item_uses_left(id), it.desc])
+		i += 1
+	_item_panel.text = "\n".join(lines)
+	_item_panel.visible = true
+
+## 数字键选择道具：自身类直接使用，其余进入目标选择（高亮合法目标）
+func _select_item_by_index(idx: int) -> void:
+	var ids := manager.item_stock.keys()
+	if idx < 0 or idx >= ids.size():
+		return
+	var item := DataLoader.get_item(ids[idx])
+	var u := manager.active_unit
+	if item == null or u == null:
+		return
+	if manager.item_uses_left(item.item_id) <= 0:
+		_push_message("%s 已用完" % item.name)
+		return
+	var skill := item.to_skill_data()
+	if skill.range_shape == &"self":
+		_submit_item(u, item, u)
+		return
+	_pending_item = item
+	_item_menu_open = false
+	_item_panel.visible = false
+	_hint_label.text = "选择 %s 的目标（右键/ESC 返回列表）" % item.name
+	queue_redraw()
+
+## 提交道具指令：使用占本激活行动（ItemCommand 内置，与攻击/技能同级）
+func _submit_item(u: Unit, item: ItemData, target: Unit = null, aim: Vector2i = Vector2i(-1, -1)) -> void:
+	manager.submit_command(ItemCommand.new(u, item, target, aim))
+	_pending_item = null
+	_close_item_menu()
+	_push_message("%s 使用 %s（剩 %d 次）" % [u.display_name(), item.name, manager.item_uses_left(item.item_id)])
+	_after_player_action()
+
+## 取消当前指向/目标选择：道具目标选择退回列表，列表展开则收起，技能指向一并清除
+func _cancel_targeting() -> void:
+	if _pending_item != null:
+		_pending_item = null
+		_open_item_menu()
+	elif _item_menu_open:
+		_close_item_menu()
+	pending_skill = null
+	queue_redraw()
+
 func _handle_cell_click(cell_coords: Vector2i) -> void:
 	var u := manager.active_unit
 	if u == null or u.team != Unit.Team.PLAYER or manager.state != BattleManager.State.IDLE:
@@ -398,6 +516,19 @@ func _handle_cell_click(cell_coords: Vector2i) -> void:
 	if not grid.is_inside(cell_coords):
 		return
 	var cell := grid.get_cell(cell_coords)
+	# 待点选目标的道具：点击合法目标单位提交（line 类指向同技能口径）
+	if _pending_item != null:
+		var item := _pending_item
+		var skill := item.to_skill_data()
+		if Targeting.needs_aim(skill):
+			if cell.occupant != null and cell.occupant.team != u.team:
+				_submit_item(u, item, null, cell_coords)
+			return
+		if cell.occupant != null:
+			var legal := Targeting.resolve(skill, u, Vector2i(-1, -1), manager.grid, manager.units, manager.rolls)
+			if legal.has(cell.occupant):
+				_submit_item(u, item, cell.occupant)
+		return
 	# 待指向技能：点击敌人所在格作为 aim 方向
 	if pending_skill != null:
 		if cell.occupant != null and cell.occupant.team != u.team:
@@ -414,32 +545,56 @@ func _handle_cell_click(cell_coords: Vector2i) -> void:
 			manager.action_used = true
 			_after_player_action()
 		return
-	# 移动：点击可达格（移动可拆成两段，策划文档 6.5）
-	if not manager.move_used and reachable.has(cell_coords):
+	# 攻击可破坏障碍（拒马）：点击射程内的障碍格（仅普攻，6.3）
+	if cell.has_obstacle():
+		if not manager.action_used and manager.in_obstacle_range(u, cell_coords):
+			manager.submit_command(AttackCommand.new(u, null, manager.basic_attack_skill(u), cell_coords))
+			manager.action_used = true
+			_after_player_action()
+		return
+	# 移动：点击可达格（移动可拆成两段：剩余移动力 > 0 即可再次移动，策划文档 6.5）
+	if manager.can_move(u) and reachable.has(cell_coords):
 		var path := grid.find_path(u, cell_coords)
 		if path.is_empty():
 			return
 		path.remove_at(0)
 		manager.submit_command(MoveCommand.new(u, path))
-		manager.move_used = true
-		var remaining: int = u.get_move(grid) - int(reachable[cell_coords])
-		reachable = grid.get_reachable(u, remaining) if remaining > 0 else {}
+		reachable = manager.reachable_cells(u)   # 按剩余移动力重算可达格
 		_after_player_action()
 
 func _after_player_action() -> void:
-	if manager.move_used and manager.action_used:
+	# 激活结束条件不变：行动 + 移动力都用完，或主动待机（两段移动不算两次行动）
+	if manager.action_used and manager.move_points_left <= 0:
 		manager.finish_turn()
 	else:
+		_update_battle_hint()
 		queue_redraw()
+
+## 操作提示：随剩余移动力与行动状态刷新（策划 6.5）
+func _update_battle_hint() -> void:
+	var u := manager.active_unit
+	if u == null:
+		return
+	var parts: Array[String] = []
+	if manager.move_points_left > 0:
+		parts.append("剩余移动力 %d：点蓝格移动" % manager.move_points_left)
+	if not manager.action_used:
+		parts.append("点敌人·拒马攻击 / Q 主动技 / W 绝技 / E 夺取 / R 道具")
+	parts.append("空格待机")
+	_hint_label.text = "%s 行动中：%s" % [u.display_name(), " / ".join(parts)]
 
 # ---------------------------------------------------------------- 回合与信号
 
 func _on_turn_started(unit: Unit) -> void:
 	reachable.clear()
 	pending_skill = null
+	_item_menu_open = false
+	_pending_item = null
+	if _item_panel != null:
+		_item_panel.visible = false
 	if unit.team == Unit.Team.PLAYER and manager.auto_mode == BattleManager.AutoMode.MANUAL:
-		reachable = grid.get_reachable(unit, unit.get_move(grid))
-		_hint_label.text = "%s 行动中：点蓝格移动 / 点敌人攻击 / Q 主动技 / W 绝技 / E 夺取 / 空格待机" % unit.display_name()
+		reachable = manager.reachable_cells(unit)
+		_update_battle_hint()
 	else:
 		_hint_label.text = "%s 行动中……" % unit.display_name()
 	AudioManager.play("sfx_turn")
@@ -659,15 +814,17 @@ func _draw_terrain() -> void:
 		if cell.has_obstacle():
 			draw_line(rect.position, rect.position + rect.size, Color(0.2, 0.1, 0.05), 3.0)
 			draw_line(rect.position + Vector2(rect.size.x, 0), rect.position + Vector2(0, rect.size.y), Color(0.2, 0.1, 0.05), 3.0)
+			# 剩余耐久（占位表现：左下角数字）
+			draw_string(ThemeDB.fallback_font, rect.position + Vector2(5, rect.size.y - 7),
+				str(cell.obstacle_hp), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("F5F1E8"))
 		draw_rect(rect, Color(0.15, 0.22, 0.25, 0.6), false, 1.0)   # 格子边界（墨色）
 
 ## 布阵阶段：部署区高亮、敌方危险范围热力图（6.8）、左侧候选条
 func _draw_deploy() -> void:
 	var zone := manager.level.deploy_zone
-	# 危险范围热力图：敌方移动力+射程曼哈顿覆盖（近似，不含地形/阻挡，D28 注）
-	for e in manager.units:
-		if e.team != Unit.Team.ENEMY or not e.is_alive():
-			continue
+	# 危险范围热力图：敌方移动力+射程曼哈顿覆盖（近似，不含地形/阻挡，D28 注）；
+	# 迷雾关（6.8）布阵阶段敌情不明，deploy_intel_enemies 返回空则不画
+	for e in manager.deploy_intel_enemies():
 		var reach: int = e.data.move + e.data.range_max
 		for dy in range(-reach, reach + 1):
 			for dx in range(-reach, reach + 1):
@@ -707,7 +864,14 @@ func _draw_highlights() -> void:
 		draw_rect(Rect2(Vector2(c) * CELL, Vector2(CELL, CELL)), Color(0.3, 0.55, 1.0, 0.30))
 	var u := manager.active_unit
 	if u != null and u.team == Unit.Team.PLAYER and manager.state == BattleManager.State.IDLE:
-		if pending_skill != null:
+		if _pending_item != null:
+			# 道具目标选择：范围底色 + 合法目标圈（靛蓝，与攻击红/绝技金区分）
+			var iskill := _pending_item.to_skill_data()
+			for c in Targeting.cells_in_range(iskill, u, grid):
+				draw_rect(Rect2(Vector2(c) * CELL, Vector2(CELL, CELL)), Color(0.24, 0.49, 0.69, 0.25))
+			for t in Targeting.resolve(iskill, u, Vector2i(-1, -1), manager.grid, manager.units, manager.rolls):
+				draw_arc(Vector2(t.coords) * CELL + Vector2(CELL, CELL) / 2, CELL * 0.42, 0, TAU, 24, Color("3E7CB1"), 3.0)
+		elif pending_skill != null:
 			for c in Targeting.cells_in_range(pending_skill, u, grid):
 				draw_rect(Rect2(Vector2(c) * CELL, Vector2(CELL, CELL)), Color(0.62, 0.17, 0.15, 0.25))
 			for e in manager.units:
@@ -716,10 +880,16 @@ func _draw_highlights() -> void:
 		elif not manager.action_used:
 			for e in manager.enemies_in_range(u):
 				draw_arc(Vector2(e.coords) * CELL + Vector2(CELL, CELL) / 2, CELL * 0.42, 0, TAU, 24, Color("9E2B25"), 3.0)
+			# 可破坏障碍（拒马）高亮：橙色圈可点选普攻
+			for c in manager.obstacles_in_range(u):
+				draw_arc(Vector2(c) * CELL + Vector2(CELL, CELL) / 2, CELL * 0.42, 0, TAU, 24, Color("D9642A"), 3.0)
 
 func _draw_units() -> void:
 	for u in manager.units:
 		if not u.is_alive():
+			continue
+		# 迷雾关布阵阶段（6.8）：敌方单位不展示，开战后正常可见
+		if manager.state == BattleManager.State.DEPLOY and manager.level.fog and u.team == Unit.Team.ENEMY:
 			continue
 		var center := Vector2(u.coords) * CELL + Vector2(CELL, CELL) / 2
 		if u.is_object:

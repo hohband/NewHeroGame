@@ -143,6 +143,12 @@ func test_random_buff_picks_first_option() -> void:
 	EffectSystem.execute(_skill(&"t", "random_buff(def_up,0.4,2|counter,1)"), ctx)
 	assert_eq(f["actor"].get_def(f["grid"]), 70, "50 × 1.4，选中第一选项")
 
+func test_random_buff_middle_option_reachable() -> void:
+	var f: Dictionary = _buff_ctx()
+	var ctx := EffectContext.new(f["actor"], f["actor"], f["grid"], FixedRollSource.new([50.0]))
+	EffectSystem.execute(_skill(&"t", "random_buff(def_up,0.4,2|counter,1|dodge_up,0.1,1)"), ctx)
+	assert_true(f["actor"].has_status(&"counter"), "三选项时 50% 判定值命中中间选项（均匀选取）")
+
 func test_random_buff_unimplemented_option_safe() -> void:
 	var f: Dictionary = _buff_ctx()
 	var ctx := EffectContext.new(f["actor"], f["actor"], f["grid"], FixedRollSource.new([99.0]))

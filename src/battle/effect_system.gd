@@ -4,13 +4,13 @@ extends RefCounted
 ## 已实现：伤害/治疗（phys_dmg、mgc_dmg、heal）、怒气（rage）、位移（pull、push、pull_to_front、
 ## swap_position、teleport）、控制（stun、sleep、sleep_chance、paralyze、bind）、增减益（buff、def_up、
 ## armor_break、dodge_up、block_up、debuff_mgc、move_mod）、机制（steal_buff、dispel、summon、aura、
-## guard、counter、extra_action*、av_mod）、DoT（poison、burn、bleed）、random_buff、hit_rate。
+## guard、counter、extra_action*、av_mod）、DoT（poison、burn、bleed）、random_buff、hit_rate、chance。
 ## （* extra_action 为修正类，由 SkillCommand 统一处理；词表同步见数据表说明第三节）
 ## 解析失败或未实现的效果必须报错并指出技能 ID 与效果名（数据表说明第四节）。
 
 ## DoT 每跳伤害 = 目标最大生命的百分比（占位值，决策日志 D16，待策划确认）
 const DOT_PERCENT := 5
-## 「高防目标」判定阈值（曹正解牛刀法，占位值，决策日志 D22，待策划确认）
+## 「高防目标」判定阈值（曹正解牛刀法，占位值，决策日志 D21，待策划确认）
 const HIGH_DEF_THRESHOLD := 100
 ## 召唤物默认耐久（旗帜等，占位值，决策日志 D27）
 const SUMMON_HP := 300
@@ -18,7 +18,17 @@ const SUMMON_HP := 300
 const MODIFIER_EFFECTS: Array[String] = [
 	"bonus_by_self_lost_hp", "bonus_vs_elite", "bonus_vs_high_def", "bonus_vs_cavalry",
 	"sure_hit", "hit_rate", "target_rule", "execute_below", "random_target", "friendly_fire",
-	"refresh_on_kill", "extra_action",
+	"refresh_on_kill", "extra_action", "chance",
+]
+## 已实现的原子效果全词表（44 种 + chance；validate 数据校验用，新增效果时同步，数据表说明第三节）
+const KNOWN_EFFECTS: Array[String] = [
+	"phys_dmg", "mgc_dmg", "heal", "bleed", "burn", "poison",
+	"pull", "pull_to_front", "push", "swap_position", "teleport",
+	"stun", "sleep", "sleep_chance", "paralyze", "bind",
+	"buff", "debuff_mgc", "def_up", "dodge_up", "block_up", "armor_break", "move_mod", "random_buff",
+	"steal_buff", "dispel", "summon", "aura", "guard", "counter", "extra_action", "av_mod",
+	"refresh_on_kill", "execute_below", "sure_hit", "random_target", "friendly_fire", "hit_rate", "rage",
+	"bonus_vs_elite", "bonus_vs_high_def", "bonus_vs_cavalry", "bonus_by_self_lost_hp", "target_rule", "chance",
 ]
 
 ## "phys_dmg(0.9)x4;rage(+20)" -> [{name, args, times}, ...]
@@ -60,6 +70,8 @@ static func scan_modifiers(effects: Array) -> Dictionary:
 				mods["sure_hit"] = true
 			"hit_rate":
 				mods["hit_rate"] = float(args[0])
+			"chance":
+				mods["chance"] = float(args[0])
 			"bonus_by_self_lost_hp":
 				mods["bonus_by_self_lost_hp"] = float(args[0])
 			"bonus_vs_elite":
@@ -87,6 +99,9 @@ static func execute(skill: SkillData, ctx: EffectContext) -> Array:
 	# hit_rate(p)：整个技能对该目标按概率命中（白胜蒙汗药酒 80%，逐目标判定）
 	if ctx.mods.has("hit_rate") and ctx.rolls.roll() >= float(ctx.mods["hit_rate"]) * 100.0:
 		return [{"type": "miss", "source": ctx.actor, "target": ctx.target, "skill": skill.skill_id}]
+	# chance(p)：整串效果按概率触发（被动触发语义；未触发不产事件、无表现）
+	if ctx.mods.has("chance") and ctx.rolls.roll() >= float(ctx.mods["chance"]) * 100.0:
+		return []
 	var events: Array = []
 	for eff in effects:
 		if MODIFIER_EFFECTS.has(String(eff["name"])):
@@ -206,24 +221,32 @@ static func _phys_dmg(skill: SkillData, multiplier: float, ctx: EffectContext, a
 	if mods.has("bonus_vs_cavalry") and target.data.unit_class == &"cavalry":
 		mult *= 1.0 + float(mods["bonus_vs_cavalry"])
 	var sure_hit := bool(mods.get("sure_hit", false))
-	var r := DamageCalculator.compute(ctx.actor, target, mult, ctx.grid, ctx.rolls, 0.0, sure_hit, attack_value)
+	var r := DamageCalculator.compute(ctx.actor, target, mult, ctx.grid, ctx.rolls, sure_hit, attack_value)
 	if r["dodged"]:
 		return [{"type": "dodge", "source": ctx.actor, "target": target, "skill": skill.skill_id}]
 	var applied: int = target.take_damage(int(r["amount"]))
 	var killed := not target.is_alive()
-	# 怒气：受击 +10（文档未量化，占位值，决策日志 D7）；击杀奖励 +30（策划文档 6.5）
-	target.gain_rage(10)
-	if killed:
-		ctx.actor.gain_rage(30)
+	# 怒气：受击 rage_on_hit_taken（文档未量化，占位值，决策日志 D7）；击杀 rage_on_kill（策划文档 6.5）；
+	# 被动附带伤害不产怒气（mods.passive，决策日志 D41——否则被动戳刺等于给对面攒绝技）
+	if not ctx.mods.has("passive"):
+		target.gain_rage(int(_constant(ctx, "rage_on_hit_taken", 10.0)))
+		if killed:
+			ctx.actor.gain_rage(int(_constant(ctx, "rage_on_kill", 30.0)))
 	events.append({
 		"type": "damage", "source": ctx.actor, "target": target, "skill": skill.skill_id,
 		"amount": applied, "crit": r["crit"], "blocked": r["blocked"],
 		"dir_mod": r["dir_mod"], "height_mod": r["height_mod"], "died": killed,
 	})
 	# counter：受击方在武器范围内反击一次（杜迁摸着天/石勇赌命，决策日志 D27；深度防互反）
+	# 「武器范围」与普攻同口径（weapons.csv 形状模板）；无 battle 上下文时退回曼哈顿区间
 	if not killed and ctx.depth == 0 and target.has_status(&"counter"):
-		var dist := _manhattan(ctx.actor.coords, target.coords)
-		if dist >= target.data.range_min and dist <= target.data.range_max:
+		var in_range := false
+		if ctx.battle != null:
+			in_range = ctx.battle.in_attack_range(target, ctx.actor)
+		else:
+			var dist := _manhattan(ctx.actor.coords, target.coords)
+			in_range = dist >= target.data.range_min and dist <= target.data.range_max
+		if in_range:
 			var cctx := EffectContext.new(target, ctx.actor, ctx.grid, ctx.rolls, ctx.battle)
 			cctx.depth = 1
 			events.append_array(_phys_dmg(skill, 1.0, cctx))
@@ -376,8 +399,9 @@ static func _random_buff(skill: SkillData, args: Array, ctx: EffectContext) -> A
 	if options.is_empty():
 		push_error("EffectSystem: random_buff 无选项（技能 %s）" % skill.skill_id)
 		return []
-	var idx := 0 if ctx.rolls.roll() < 50.0 else options.size() - 1
-	var parts := options[mini(idx, options.size() - 1)].split(",", false)
+	# 经 RollSource 均匀选取（与 Targeting 随机选目标同口径）
+	var idx := int(clampf(ctx.rolls.roll() / 100.0, 0.0, 0.9999) * options.size())
+	var parts := options[idx].split(",", false)
 	if parts.is_empty():
 		push_error("EffectSystem: random_buff 选项为空（技能 %s）" % skill.skill_id)
 		return []
@@ -453,6 +477,12 @@ static func _aura(ctx: EffectContext, skill: SkillData, args: Array) -> Dictiona
 	return {"type": "aura", "holder": holder, "radius": radius, "mods": mods}
 
 # ---------------------------------------------------------------- 工具
+
+## 战斗常数（battle_constants.csv）：无 battle 上下文（纯效果单测）时退回 fallback
+static func _constant(ctx: EffectContext, key: String, fallback: float) -> float:
+	if ctx.battle != null and ctx.battle.data != null:
+		return ctx.battle.data.get_constant(key, fallback)
+	return fallback
 
 static func _manhattan(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)

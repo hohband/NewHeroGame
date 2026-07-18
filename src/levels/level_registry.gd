@@ -1,6 +1,6 @@
 class_name LevelRegistry
 extends RefCounted
-## 关卡注册表：以代码构建 LevelConfig（.tres 可视化编辑工作流在 M2 接入，决策日志 D28）。
+## 关卡注册表：以代码构建 LevelConfig（现状：M2 后仍维持代码构建，未迁 .tres，决策日志 D28）。
 
 ## 全部关卡 id（章节顺序，关卡选择界面与章节终关判定用）
 static func list_ids() -> Array[String]:
@@ -23,9 +23,9 @@ const EPILOGUES := {
 	],
 }
 
-## 挑战关 id（高难挑战解锁武将，5.3/挑战关「清风寨」「霹雳火」「东昌府」）
+## 挑战关 id（高难挑战解锁武将，5.3/挑战关「清风寨」「霹雳火」「东昌府」；马军限定为 6.8 特殊机制示范）
 static func list_challenge_ids() -> Array[String]:
-	return ["challenge_dongchang"]
+	return ["challenge_dongchang", "challenge_majun"]
 
 ## 日常副本 id（第九章：经验/金币/突破材料本，自动战斗主战场，决策日志 D34）
 static func list_daily_ids() -> Array[String]:
@@ -57,6 +57,8 @@ static func get_level(id: String) -> LevelConfig:
 			return _ch04_02()
 		"challenge_dongchang":
 			return _challenge_dongchang()
+		"challenge_majun":
+			return _challenge_majun()
 		"ch05_01":
 			return _ch05_01()
 		"ch05_02":
@@ -90,9 +92,10 @@ static func get_level(id: String) -> LevelConfig:
 				{"unit": &"xiangjun_shield", "coords": Vector2i(4, 1)}, {"unit": &"xiangjun_shield", "coords": Vector2i(4, 2)},
 				{"unit": &"lao_duguan", "coords": Vector2i(4, 0), "elite": true}])
 		"daily_mat_1":
+			# 迷雾示范关（6.8：奇袭敌情不明，布阵阶段不展示敌方阵容与危险范围）
 			return _daily("daily_mat_1", "奇袭·辎重营", 7, 0, {"first_clear": {"breakthrough_mat": 3}, "regular": {"breakthrough_mat": 2}},
 				[{"unit": &"xiangjun_shield", "coords": Vector2i(3, 1)}, {"unit": &"xiangjun_shield", "coords": Vector2i(5, 1)},
-				{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2)}])
+				{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2)}], true)
 		"daily_mat_2":
 			return _daily("daily_mat_2", "奇袭·军械库", 14, 0, {"first_clear": {"breakthrough_mat": 6}, "regular": {"breakthrough_mat": 4}},
 				[{"unit": &"xiangjun_shield", "coords": Vector2i(3, 1)}, {"unit": &"xiangjun_shield", "coords": Vector2i(5, 1)},
@@ -101,8 +104,8 @@ static func get_level(id: String) -> LevelConfig:
 	push_error("LevelRegistry: 未知关卡 '%s'" % id)
 	return null
 
-## 日常副本公共底（无章节门槛、无次数限制的刷资源关，D34）
-static func _daily(id: String, name: String, rec_level: int, exp_override: int, rewards: Dictionary, enemies: Array) -> LevelConfig:
+## 日常副本公共底（无章节门槛、无次数限制的刷资源关，D34）；fog 为 6.8 迷雾机制开关
+static func _daily(id: String, name: String, rec_level: int, exp_override: int, rewards: Dictionary, enemies: Array, fog := false) -> LevelConfig:
 	var l := LevelConfig.new()
 	l.id = id
 	l.name = name
@@ -114,6 +117,7 @@ static func _daily(id: String, name: String, rec_level: int, exp_override: int, 
 	l.win_condition = {"type": "WIPE_OUT"}
 	l.lose_conditions = [{"type": "WIPED_OUT"}]
 	l.exp_override = exp_override
+	l.fog = fog
 	l.required_units = []
 	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"hua_rong",
 		&"li_kui", &"qin_ming", &"zhang_qing", &"hu_sanniang", &"dai_zong", &"shi_qian",
@@ -558,6 +562,48 @@ static func _challenge_dongchang() -> LevelConfig:
 		{"type": "dialogue", "text": "【挑战】龚旺、丁得孙两员副将护翼左右，先剪羽翼再擒主将。"}]}]
 	l.unlock_grant = {"unit": &"zhang_qing"}
 	l.rewards = {"first_clear": {"gold": 1500, "breakthrough_mat": 3}, "regular": {"gold": 350}}
+	return l
+
+## 挑战关·马军试炼（策划 6.8「限定职业上阵」：仅马军可上阵，候选条过滤 + 逻辑层硬校验）
+static func _challenge_majun() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "challenge_majun"
+	l.name = "挑战·马军试炼"
+	l.mode = "challenge"
+	l.chapter = 5
+	l.recommended_level = 22
+	l.grid_size = Vector2i(10, 8)
+	# 开阔校场：中央官道纵贯，两侧高台箭楼，宜马军驰突
+	for y in range(8):
+		l.terrain_map[Vector2i(4, y)] = &"road"
+		l.terrain_map[Vector2i(5, y)] = &"road"
+	for c in [Vector2i(1, 2), Vector2i(8, 2), Vector2i(1, 5), Vector2i(8, 5)]:
+		l.terrain_map[c] = &"hill"
+	l.height_map = {Vector2i(1, 2): 1, Vector2i(8, 2): 1, Vector2i(1, 5): 1, Vector2i(8, 5): 1}
+	l.win_condition = {"type": "KILL_BOSS"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = []
+	l.allowed_classes = ["cavalry"]
+	# 候选池混排非马军（布阵条只显示马军：林冲/秦明/扈三娘；其余被限定过滤）
+	l.roster = [&"lin_chong", &"wu_song", &"qin_ming", &"hua_rong", &"hu_sanniang",
+		&"lu_zhishen", &"li_kui", &"an_daoquan"]
+	l.deploy_zone = Rect2i(0, 6, 10, 2)
+	l.max_deploy = 3   # 马军仅三员，全员可上
+	l.enemies = [
+		{"unit": &"yang_zhi_boss", "coords": Vector2i(4, 1), "elite": true, "boss": true},   # 官军马军教头（占位）
+		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 2)},   # 长枪阵克马军，正面硬冲吃亏
+		{"unit": &"xiangjun_spear", "coords": Vector2i(6, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 3)},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "官军马军教头立马校场，指名会一会梁山马军。"},
+			{"type": "dialogue", "text": "【挑战】本关限马军上阵。敌枪兵克马，绕开正面、侧翼驰突。"}]},
+		{"id": "t2", "once": true, "on": {"type": "HP_BELOW", "unit": "yang_zhi_boss", "ratio": 0.5}, "actions": [
+			{"type": "dialogue", "text": "马军教头：「好马！再来——」攻势愈发凶狠。"},
+			{"type": "buff", "unit": "yang_zhi_boss", "field": &"atk", "value": 20, "duration": 99, "name": "棋逢敌手"}]},
+	]
+	l.rewards = {"first_clear": {"gold": 2000, "breakthrough_mat": 4, "skill_book": 2}, "regular": {"gold": 400}}
 	return l
 
 # ---------------------------------------------------------------- 第五章：江州劫法场

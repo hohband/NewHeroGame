@@ -34,6 +34,12 @@ extends Resource
 @export var deploy_zone: Rect2i = Rect2i(0, 5, 8, 3)
 @export var max_deploy: int = 8
 
+## 特殊关卡机制（策划 6.8）：迷雾——布阵阶段敌情不明（敌方阵容与危险范围不展示；
+## 仅影响布阵阶段信息，开战后单位正常可见，不做全图战争迷雾）
+@export var fog: bool = false
+## 限定职业上阵（如 ["cavalry"] 马军限定挑战关；空 = 不限）。布阵候选过滤 + 逻辑层硬校验
+@export var allowed_classes: Array[String] = []
+
 ## NPC 友军与敌方：[{"unit": StringName, "coords": Vector2i, "elite": bool, "boss": bool}]
 @export var npc_allies: Array[Dictionary] = []
 @export var enemies: Array[Dictionary] = []

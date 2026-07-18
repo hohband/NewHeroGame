@@ -123,6 +123,10 @@ func play_event(e: Dictionary) -> void:
 				play("sfx_hit")
 		"dodge":
 			play("sfx_dodge")
+		"obstacle_damage":
+			play("sfx_hit")
+		"terrain_change":
+			play("sfx_die")   # 障碍破坏（拒马坍塌）
 		"heal":
 			play("sfx_heal")
 		"buff":

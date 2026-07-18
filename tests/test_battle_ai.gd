@@ -166,3 +166,128 @@ func test_full_auto_battle_completes() -> void:
 		m.run_ai()
 	assert_eq(m.state, BattleManager.State.BATTLE_END, "全自动整局应在 500 回合内分出胜负")
 	assert_gt(guard, 3, "战斗应持续数个回合")
+
+# ---------------------------------------------------------------- D26 占位收口（表15：连线掩护/控制高价值/增益核心；光环实判；医者退化）
+
+func test_vanguard_cover_line_bonus() -> void:
+	# 敌人 (4,2) → 队友 (4,6) 的连线格为 (4,3)(4,4)(4,5)
+	var vg = autofree(UnitFactory.make_unit(80, 50, 60, Unit.Team.ENEMY, Vector2i(1, 1)))
+	vg.data.unit_class = &"vanguard"
+	var ally = autofree(UnitFactory.make_unit(50, 50, 50, Unit.Team.ENEMY, Vector2i(4, 6), &"ally"))
+	var foe = autofree(UnitFactory.make_unit(50, 50, 50, Unit.Team.PLAYER, Vector2i(4, 2)))
+	grid.place_unit(vg, Vector2i(1, 1))
+	grid.place_unit(ally, Vector2i(4, 6))
+	grid.place_unit(foe, Vector2i(4, 2))
+	var m := _manager([vg, ally, foe])
+	assert_eq(BattleAI._class_special(vg, null, Vector2i(4, 4), m, 0.0, 1), 25.0, "落点在敌我连线格 +25（表15）")
+	assert_eq(BattleAI._class_special(vg, null, Vector2i(4, 5), m, 0.0, 1), 35.0, "连线格 + 相邻队友 = 25+10")
+	assert_eq(BattleAI._class_special(vg, null, Vector2i(5, 4), m, 0.0, 1), 0.0, "落点不在连线格无加分")
+
+func test_strategist_control_high_value_bonus() -> void:
+	# 高价值目标（医者，表13 最高档 30）被控制技能命中 +40
+	var st = autofree(UnitFactory.make_unit(50, 50, 60, Unit.Team.ENEMY, Vector2i(4, 4)))
+	st.data.unit_class = &"strategist"
+	var inf = autofree(UnitFactory.make_unit(50, 50, 60, Unit.Team.ENEMY, Vector2i(1, 1), &"inf"))
+	var healer_t = autofree(UnitFactory.make_unit(50, 50, 40, Unit.Team.PLAYER, Vector2i(4, 5), &"healer_t"))
+	healer_t.data.unit_class = &"healer"
+	var vg_t = autofree(UnitFactory.make_unit(50, 50, 40, Unit.Team.PLAYER, Vector2i(4, 3), &"vg_t"))
+	vg_t.data.unit_class = &"vanguard"
+	grid.place_unit(st, Vector2i(4, 4))
+	grid.place_unit(inf, Vector2i(1, 1))
+	grid.place_unit(healer_t, Vector2i(4, 5))
+	grid.place_unit(vg_t, Vector2i(4, 3))
+	var m := _manager([st, inf, healer_t, vg_t])
+	var control: SkillData = loader.get_skill(&"act_yaojiu")    # sleep(1);hit_rate(0.8)，纯控制
+	var nuke: SkillData = loader.get_skill(&"ult_fengxue")      # 纯伤害，非控制
+	assert_eq(BattleAI._control_high_value_bonus(st, control, healer_t, m), 40.0, "谋士控制命中高价值 +40（表15）")
+	assert_eq(BattleAI._control_high_value_bonus(st, control, vg_t, m), 0.0, "低价值目标不加分")
+	assert_eq(BattleAI._control_high_value_bonus(st, nuke, healer_t, m), 0.0, "非控制技能不加分")
+	assert_eq(BattleAI._control_high_value_bonus(inf, control, healer_t, m), 0.0, "非谋士职业不加分")
+	# 技能评分整合：命中目标换成低价值职业后，分差 = 目标价值差 × 权重 + 40
+	var w := loader.get_ai_weights(&"strategist")
+	var s1 := BattleAI._score_skill(st, control, st.coords, m, w)
+	healer_t.data.unit_class = &"vanguard"
+	var s2 := BattleAI._score_skill(st, control, st.coords, m, w)
+	assert_almost_eq(s1 - s2, 20.0 * float(w["target_value"]) + 40.0, 0.01, "分差 = 目标价值差 + 控制高价值 +40")
+
+func test_support_buff_core_bonus() -> void:
+	# 羁绊在场激活 = 阵容核心（D26 改判）；辅助增益命中核心 +25（表15）
+	var dz := _csv_unit(&"dai_zong", Unit.Team.ENEMY, Vector2i(2, 2))
+	var core = autofree(UnitFactory.make_unit(50, 50, 50, Unit.Team.ENEMY, Vector2i(3, 3), &"core_u"))
+	var partner = autofree(UnitFactory.make_unit(50, 50, 50, Unit.Team.ENEMY, Vector2i(5, 5), &"partner_u"))
+	var bond: Array[Dictionary] = [{"target": &"partner_u", "name": "测试羁绊"}]
+	core.data.bonds = bond
+	grid.place_unit(core, Vector2i(3, 3))
+	grid.place_unit(partner, Vector2i(5, 5))
+	var m := _manager([dz, core, partner])
+	var buff_skill: SkillData = loader.get_skill(&"act_shenxing")   # ally 全队增益
+	var w := loader.get_ai_weights(&"support")
+	var before := BattleAI._score_skill(dz, buff_skill, dz.coords, m, w)
+	BondSystem.apply_bonds(m.units, loader.progression)
+	var after := BattleAI._score_skill(dz, buff_skill, dz.coords, m, w)
+	assert_true(BattleAI._is_core(core), "羁绊激活后为阵容核心")
+	assert_false(BattleAI._is_core(partner), "单向羁绊只有持有者一方挂加成")
+	assert_almost_eq(after - before, 25.0, 0.01, "增益命中羁绊核心 +25（表15）")
+	assert_almost_eq(BattleAI._target_value(core, m) - BattleAI._target_value(partner, m), 15.0, 0.01, "羁绊核心目标价值 +15（D26 改判）")
+
+func test_aura_coverage_uses_real_radius() -> void:
+	# 真实光环（Buff.aura_radius，D27）：落点在半径内 +1/源；无光环时落点旁有队友也不计（不再按 2 格代理）
+	var u = autofree(UnitFactory.make_unit(50, 50, 60, Unit.Team.ENEMY, Vector2i(4, 4)))
+	var holder = autofree(UnitFactory.make_unit(50, 50, 50, Unit.Team.ENEMY, Vector2i(0, 0), &"holder"))
+	var mate = autofree(UnitFactory.make_unit(50, 50, 50, Unit.Team.ENEMY, Vector2i(4, 5), &"mate"))
+	grid.place_unit(u, Vector2i(4, 4))
+	grid.place_unit(holder, Vector2i(0, 0))
+	grid.place_unit(mate, Vector2i(4, 5))
+	var m := _manager([u, holder, mate])
+	assert_eq(BattleAI._aura_coverage(u, Vector2i(4, 4), m), 0.0, "无光环：落点旁有队友也不计（D26 改判）")
+	var aura := Buff.new()
+	aura.buff_id = &"aura_test"
+	aura.aura_radius = 3
+	aura.aura_mods = {&"atk": 15}
+	holder.add_buff(aura)
+	assert_eq(BattleAI._aura_coverage(u, Vector2i(0, 3), m), 1.0, "落点在光环半径内 +1")
+	assert_eq(BattleAI._aura_coverage(u, Vector2i(0, 4), m), 0.0, "落点超出光环半径不计")
+
+func test_aura_coverage_self_source() -> void:
+	# 自身为光环源：落点光环能罩住的队友数
+	var u = autofree(UnitFactory.make_unit(50, 50, 60, Unit.Team.ENEMY, Vector2i(4, 4)))
+	var mate = autofree(UnitFactory.make_unit(50, 50, 50, Unit.Team.ENEMY, Vector2i(4, 5), &"mate"))
+	var far = autofree(UnitFactory.make_unit(50, 50, 50, Unit.Team.ENEMY, Vector2i(0, 0), &"far"))
+	grid.place_unit(u, Vector2i(4, 4))
+	grid.place_unit(mate, Vector2i(4, 5))
+	grid.place_unit(far, Vector2i(0, 0))
+	var m := _manager([u, mate, far])
+	var aura := Buff.new()
+	aura.buff_id = &"aura_test"
+	aura.aura_radius = 3
+	aura.aura_mods = {&"atk": 15}
+	u.add_buff(aura)
+	assert_eq(BattleAI._aura_coverage(u, Vector2i(4, 4), m), 1.0, "自身光环从落点罩住 1 名队友")
+	assert_eq(BattleAI._aura_coverage(u, Vector2i(2, 2), m), 0.0, "落点远了罩不到队友")
+
+func test_healer_falls_back_to_support_scoring() -> void:
+	# 无治疗需求：治疗技能本身不施放（维持原行为）；医者的增益技能按辅助口径评分（命中核心 +25，表15）
+	var an := _csv_unit(&"an_daoquan", Unit.Team.PLAYER, Vector2i(4, 4))
+	var core = autofree(UnitFactory.make_unit(50, 50, 50, Unit.Team.PLAYER, Vector2i(4, 5), &"core_u"))
+	var partner = autofree(UnitFactory.make_unit(50, 50, 50, Unit.Team.PLAYER, Vector2i(6, 6), &"partner_u"))
+	var bond: Array[Dictionary] = [{"target": &"partner_u", "name": "测试羁绊"}]
+	core.data.bonds = bond
+	grid.place_unit(core, Vector2i(4, 5))
+	grid.place_unit(partner, Vector2i(6, 6))
+	var m := _manager([an, core, partner])
+	var w := loader.get_ai_weights(&"healer")
+	var heal_skill: SkillData = loader.get_skill(&"act_miaoshou")
+	assert_eq(BattleAI._score_skill(an, heal_skill, an.coords, m, w), -99999.0, "全员满血：治疗技能不施放（维持原行为）")
+	# 医者持有增益技能（合成）：按辅助评分，命中羁绊核心 +25
+	var buff_skill := SkillData.new()
+	buff_skill.skill_id = &"act_test_buff"
+	buff_skill.type = &"active"
+	buff_skill.range_shape = &"diamond"
+	buff_skill.range_min = 0
+	buff_skill.range_max = 2
+	buff_skill.target = &"ally"
+	buff_skill.effects = "buff(atk+0.2,2)"
+	var before := BattleAI._score_skill(an, buff_skill, an.coords, m, w)
+	BondSystem.apply_bonds(m.units, loader.progression)
+	var after := BattleAI._score_skill(an, buff_skill, an.coords, m, w)
+	assert_almost_eq(after - before, 25.0, 0.01, "医者退化为辅助评分：增益命中核心 +25（表15）")
