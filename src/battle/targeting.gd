@@ -51,6 +51,8 @@ static func resolve_from(skill: SkillData, caster: Unit, aim: Vector2i, grid: Gr
 	return out
 
 static func _target_filter(skill: SkillData, caster: Unit, u: Unit) -> bool:
+	if u.collectable:
+		return false   # 可夺取物件不可被任何技能/攻击指定（双方都不打镖，决策日志 D38）
 	match String(skill.target):
 		"enemy":
 			return (u.team == Unit.Team.ENEMY) != (caster.team == Unit.Team.ENEMY)

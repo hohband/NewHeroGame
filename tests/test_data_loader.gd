@@ -8,7 +8,7 @@ func before_each() -> void:
 	loader.load_all()
 
 func test_loads_all_tables() -> void:
-	assert_eq(loader.units.size(), 36, "24+6 名武将 + 6 名敌方/剧情单位（enemies.csv）")
+	assert_eq(loader.units.size(), 38, "24+6 名武将 + 8 名敌方/剧情单位（enemies.csv）")
 	assert_eq(loader.skills.size(), 34, "28 个技能 + 第二批 6 个")
 	assert_eq(loader.terrains.size(), 9, "8 种地形 + 酒摊互动格")
 

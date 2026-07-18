@@ -101,8 +101,8 @@ static func _ch01_01() -> LevelConfig:
 	# 教学 1：移动与普攻（教学提示经剧情对话给出）
 	var l := _teaching_base("ch01_01", "教学·移动与攻击", 1)
 	l.enemies = [
-		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2)},
-		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 2)},
+		{"unit": &"xiangjun_recruit", "coords": Vector2i(4, 2)},
+		{"unit": &"xiangjun_recruit", "coords": Vector2i(5, 2)},
 	]
 	l.triggers = [{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
 		{"type": "dialogue", "text": "【教学】左键点蓝色高亮格移动，点红圈敌人攻击。速度快的一方可能连续行动。"},
@@ -118,9 +118,8 @@ static func _ch01_02() -> LevelConfig:
 	}
 	l.height_map = {Vector2i(5, 3): 1, Vector2i(6, 3): 1}
 	l.enemies = [
-		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 1)},
-		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 1)},
-		{"unit": &"xiangjun_shield", "coords": Vector2i(3, 1)},
+		{"unit": &"xiangjun_recruit", "coords": Vector2i(4, 1)},
+		{"unit": &"xiangjun_recruit", "coords": Vector2i(5, 1)},
 	]
 	l.triggers = [{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
 		{"type": "dialogue", "text": "【教学】森林里闪避更高；高台打低处伤害更高；绕到敌人背后是背刺加成。"}]}]
@@ -130,10 +129,9 @@ static func _ch01_03() -> LevelConfig:
 	# 教学 3：技能与怒气（Q/W 施放、待机回怒）
 	var l := _teaching_base("ch01_03", "教学·技能与怒气", 3)
 	l.enemies = [
-		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2)},
-		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 2)},
-		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 1)},
-		{"unit": &"xiangjun_shield", "coords": Vector2i(5, 1)},
+		{"unit": &"xiangjun_recruit", "coords": Vector2i(4, 2)},
+		{"unit": &"xiangjun_recruit", "coords": Vector2i(5, 2)},
+		{"unit": &"xiangjun_recruit", "coords": Vector2i(4, 1)},
 	]
 	l.triggers = [{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
 		{"type": "dialogue", "text": "【教学】Q 放主动技，W 放绝技（怒气满 100）。攻击、受击、待机都会攒怒气。"}]}]
@@ -166,9 +164,9 @@ static func _ch01_05() -> LevelConfig:
 	l.win_condition = {"type": "KILL_BOSS"}
 	l.enemies = [
 		{"unit": &"lao_duguan", "coords": Vector2i(4, 1), "elite": true, "boss": true},
-		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 2)},
-		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 2)},
-		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 2)},
+		{"unit": &"xiangjun_recruit", "coords": Vector2i(3, 2)},
+		{"unit": &"xiangjun_recruit", "coords": Vector2i(5, 2)},
+		{"unit": &"pai_recruit", "coords": Vector2i(4, 2)},
 	]
 	l.triggers = [{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
 		{"type": "dialogue", "text": "【教学】斩杀头目即胜。老都管会给亲兵鼓劲，优先集火（F 键标记）。"}]}]

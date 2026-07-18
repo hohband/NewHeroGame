@@ -5,3 +5,5 @@ xiangjun_spear,厢军枪兵,,,green,infantry,520,105,60,20,70,8,3,5,4,1,2,长枪
 xiangjun_shield,厢军刀牌手,,,green,vanguard,620,95,85,20,65,5,3,25,4,1,1,刀牌,,,杂兵,
 chao_gai_npc,晁盖,托塔天王,天魁星,purple,infantry,900,120,85,50,78,10,5,10,5,1,1,朴刀,,,NPC,
 liu_tang_npc,刘唐,赤发鬼,地异星,blue,infantry,780,110,70,40,80,12,8,5,5,1,1,朴刀,,,NPC,
+xiangjun_recruit,厢军新兵,,,green,infantry,400,80,45,15,60,5,3,0,4,1,1,长枪,,,杂兵,
+pai_recruit,刀牌新兵,,,green,vanguard,500,75,65,15,55,5,3,15,4,1,1,刀牌,,,杂兵,

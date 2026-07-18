@@ -10,7 +10,7 @@ func before_each() -> void:
 func test_batch2_loaded() -> void:
 	for id in [&"xu_ning", &"zhang_shun", &"wang_ying", &"gong_wang", &"ding_desun", &"yan_qing"]:
 		assert_not_null(loader.get_unit(id), "%s 已实装" % id)
-	assert_eq(loader.units.size(), 36, "24+6 将 + 6 敌方")
+	assert_eq(loader.units.size(), 38, "24+6 将 + 8 敌方（含 2 教学新兵）")
 	assert_eq(loader.skills.size(), 34, "技能表 +6")
 
 func test_bond_gaps_filled() -> void:

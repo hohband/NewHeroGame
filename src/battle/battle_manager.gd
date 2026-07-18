@@ -134,6 +134,7 @@ func _spawn_object(spec: Dictionary) -> Unit:
 	ud.spd = 1
 	var obj := Unit.new()
 	obj.is_object = true
+	obj.collectable = true   # 关卡物件可夺取；EffectSystem 召唤物不设此标记（D38）
 	obj.setup(ud, Unit.Team.NPC_ALLY, spec["coords"])
 	add_unit(obj)
 	grid.place_unit(obj, spec["coords"])
@@ -549,6 +550,9 @@ func _trigger_condition_met(cond: Dictionary, event: Dictionary) -> bool:
 				return false
 			if who == "enemy" and u.team != Unit.Team.ENEMY:
 				return false
+			# who 也可以是具体 unit_id（如 T2 必须是白胜进酒摊，决策日志 D38）
+			if who not in ["player", "enemy", "any"] and u.data.unit_id != StringName(who):
+				return false
 			var zone: Rect2i = cond.get("zone", Rect2i())
 			return zone.has_point(u.coords)
 	return false
@@ -640,7 +644,7 @@ func in_attack_range(attacker: Unit, target: Unit) -> bool:
 func enemies_in_range(attacker: Unit) -> Array[Unit]:
 	var out: Array[Unit] = []
 	for u in units:
-		if u.is_alive() and u.team != attacker.team and in_attack_range(attacker, u):
+		if u.is_alive() and u.team != attacker.team and not u.collectable and in_attack_range(attacker, u):
 			out.append(u)
 	return out
 

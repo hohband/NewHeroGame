@@ -43,6 +43,8 @@ static func decide(unit: Unit, battle: BattleManager) -> Array:
 		# 待机候选：原地或移动后蹲坑（含向敌接近分）
 		var ws := _score_wait(unit, dest, battle, weights, enemies)
 		candidates.append({"score": ws, "dest": dest, "kind": "wait"})
+	# 关卡目标行为（决策日志 D38）：夺取（COLLECT）与护送（ESCORT）
+	_add_objective_candidates(unit, battle, dests, candidates)
 	if candidates.is_empty():
 		return [WaitCommand.new(unit)]
 	candidates.sort_custom(func(a, b): return a["score"] > b["score"])
@@ -66,9 +68,64 @@ static func _build_plan(unit: Unit, best: Dictionary, battle: BattleManager) -> 
 			if Targeting.needs_aim(skill):
 				aim = _best_aim(unit, skill, dest, battle)
 			plan.append(SkillCommand.new(unit, skill, aim))
+		"interact":
+			plan.append(InteractCommand.new(unit, best["object"]))
 		_:
 			plan.append(WaitCommand.new(unit))
 	return plan
+
+# ---------------------------------------------------------------- 关卡目标行为（决策日志 D38）
+
+## 夺取：相邻物件 → 夺取候选（120 分，高于常规攻击）；靠近物件的落点加分。
+## 护送：护送目标本人以趋向目标区为第一优先级。
+static func _add_objective_candidates(unit: Unit, battle: BattleManager, dests: Array, candidates: Array) -> void:
+	if battle.level == null:
+		return
+	var win_type := String(battle.level.win_condition.get("type", ""))
+	if win_type == "COLLECT" and unit.team == Unit.Team.PLAYER:
+		for obj in battle.units:
+			if not (obj.is_object and obj.collectable and obj.is_alive()):
+				continue
+			var dist := _manhattan(unit.coords, obj.coords)
+			if dist == 1:
+				candidates.append({"score": 120.0, "dest": unit.coords, "kind": "interact", "object": obj})
+			elif dist > 1:
+				for dest in dests:
+					var d := _manhattan(dest, obj.coords)
+					if d < dist and d >= 1:
+						var s := 100.0 - float(d) * 2.0 + _danger(unit, dest, battle) * 0.5
+						candidates.append({"score": s, "dest": dest, "kind": "wait"})
+	elif win_type == "ESCORT" and _is_escort_unit(unit, battle):
+		var zone: Rect2i = battle.level.win_condition.get("zone", Rect2i())
+		for dest in dests:
+			var d := _dist_to_zone(dest, zone)
+			var s := 250.0 - float(d) * 3.0 + _danger(unit, dest, battle) * 0.5
+			candidates.append({"score": s, "dest": dest, "kind": "wait"})
+	# 蒙汗药酒路线：持有 act_yaojiu 的单位优先走向酒摊触发剧情（7.4 T2，决策日志 D38 注）
+	if unit.team == Unit.Team.PLAYER:
+		var act := battle.data.get_skill_for_unit(unit.data.unit_id, &"active")
+		if act != null and act.skill_id == &"act_yaojiu":
+			for coords: Vector2i in battle.grid.cells:
+				var cell: GridCell = battle.grid.cells[coords]
+				if cell.terrain.terrain_id != &"wine_stall" or cell.occupant != null:
+					continue
+				for dest in dests:
+					if dest == coords:
+						candidates.append({"score": 150.0, "dest": dest, "kind": "wait"})
+					elif _manhattan(dest, coords) < _manhattan(unit.coords, coords):
+						candidates.append({"score": 140.0 - float(_manhattan(dest, coords)) * 2.0, "dest": dest, "kind": "wait"})
+
+static func _is_escort_unit(unit: Unit, battle: BattleManager) -> bool:
+	return battle.level != null \
+		and String(battle.level.win_condition.get("type", "")) == "ESCORT" \
+		and unit.data.unit_id == StringName(battle.level.win_condition.get("unit", ""))
+
+static func _dist_to_zone(cell: Vector2i, zone: Rect2i) -> int:
+	var best := 9999
+	for y in range(zone.position.y, zone.end.y):
+		for x in range(zone.position.x, zone.end.x):
+			best = mini(best, _manhattan(cell, Vector2i(x, y)))
+	return best
 
 # ---------------------------------------------------------------- 评分因子（表13）
 
@@ -343,6 +400,8 @@ static func _hostiles_of(unit: Unit, battle: BattleManager) -> Array[Unit]:
 	return out
 
 static func _is_hostile(unit: Unit, other: Unit) -> bool:
+	if other.collectable:
+		return false   # AI 不攻击可夺取物件（杨志不砸自己的镖，决策日志 D38）
 	return (other.team == Unit.Team.ENEMY) != (unit.team == Unit.Team.ENEMY)
 
 static func _manhattan(a: Vector2i, b: Vector2i) -> int:
