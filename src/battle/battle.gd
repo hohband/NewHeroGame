@@ -239,7 +239,8 @@ func _handle_deploy_input(event: InputEvent) -> void:
 			or event.is_action_pressed("battle_wait"):
 		_on_start_battle_pressed()
 		return
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+	if event is InputEventMouseButton and event.pressed and not event.double_click \
+			and event.button_index == MOUSE_BUTTON_LEFT:
 		var pos := get_local_mouse_position()
 		# 点候选条
 		var idx := _roster_index_at(pos)
@@ -252,6 +253,8 @@ func _handle_deploy_input(event: InputEvent) -> void:
 
 func _deploy_at_cell(cell_coords: Vector2i) -> void:
 	if not manager.level.deploy_zone.has_point(cell_coords):
+		if selected_roster != -1:
+			_push_message("请点击蓝色部署区内的空格")
 		return
 	var cell := grid.get_cell(cell_coords)
 	if cell.occupant != null and manager.deployed.has(cell.occupant):
@@ -262,18 +265,20 @@ func _deploy_at_cell(cell_coords: Vector2i) -> void:
 		manager.undeploy_unit(cell.occupant)
 		AudioManager.play("sfx_ui_click")
 		return
-	if selected_roster != -1:
-		# 失败原因进消息条（部署失败此前只打控制台，玩家以为点击无效）
-		if manager.deployed.size() >= manager.level.max_deploy:
-			_push_message("上阵人数已达上限 %d：先点一名非必出的已上阵单位撤下" % manager.level.max_deploy)
-			return
-		var id: StringName = roster_ids[selected_roster]
-		var hero := SaveSystem.profile.get_hero(id) if SaveSystem.profile != null else null
-		if manager.deploy_unit(id, cell_coords, hero) == null:
-			_push_message("该格不可部署")
-			return
-		AudioManager.play("sfx_ui_click")
-		selected_roster = -1
+	if selected_roster == -1:
+		_push_message("先点左侧候选武将（头像或名字）选中，再点部署区空格上阵")
+		return
+	# 失败原因进消息条（部署失败此前只打控制台，玩家以为点击无效）
+	if manager.deployed.size() >= manager.level.max_deploy:
+		_push_message("上阵人数已达上限 %d：先点一名非必出的已上阵单位撤下" % manager.level.max_deploy)
+		return
+	var id: StringName = roster_ids[selected_roster]
+	var hero := SaveSystem.profile.get_hero(id) if SaveSystem.profile != null else null
+	if manager.deploy_unit(id, cell_coords, hero) == null:
+		_push_message("该格不可部署")
+		return
+	AudioManager.play("sfx_ui_click")
+	selected_roster = -1
 
 func _cycle_roster(dir: int) -> void:
 	if roster_ids.is_empty():
@@ -298,9 +303,15 @@ func _joy_cursor(event: InputEvent) -> bool:
 	queue_redraw()
 	return true
 
+## 候选命中区：首列头像 ±20 右延覆盖姓名（试玩反馈：点名字也应选中）；
+## 分列后的后续列压在棋盘左缘上，只保留头像圈，避免吃掉部署区点击。
 func _roster_index_at(pos: Vector2) -> int:
 	for i in roster_ids.size():
-		if pos.distance_to(_roster_center(i)) <= 18.0:
+		var c := _roster_center(i)
+		if i < ROSTER_ROWS:
+			if Rect2(c - Vector2(20, 20), Vector2(150, 40)).has_point(pos):
+				return i
+		elif pos.distance_to(c) <= 18.0:
 			return i
 	return -1
 
