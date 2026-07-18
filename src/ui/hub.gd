@@ -116,6 +116,13 @@ func _build_levels() -> void:
 			GameState.current_level_id = level_id
 			get_tree().change_scene_to_file("res://scenes/battle/battle.tscn"))
 		list.add_child(b)
+	# 终章双路线提示（第七章解锁后显示结局状态）
+	if chapter >= 7:
+		var end_label := Label.new()
+		var ending := String(SaveSystem.profile.progress.get("ending", ""))
+		end_label.text = "—— 大聚义·路线抉择已解锁 ——" if ending == "" \
+			else "—— 已达成结局：%s（可重打另一路线）——" % ("招安" if ending == "zhaoan" else "不招安")
+		list.add_child(end_label)
 	var daily_label := Label.new()
 	daily_label.text = "—— 日常副本（刷资源，自动战斗主战场）——"
 	list.add_child(daily_label)

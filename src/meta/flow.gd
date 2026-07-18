@@ -48,7 +48,12 @@ static func apply_battle_result(profile: PlayerProfile, level: LevelConfig, resu
 	if summary["first_clear"]:
 		cleared.append(level.id)
 	profile.progress["cleared"] = cleared
-	if is_chapter_final(level, loader):
+	# 结局路线（终章双路线，剧情框架；结局关不再推进章节）
+	if level.ending != "":
+		profile.progress["ending"] = level.ending
+		summary["ending"] = level.ending
+		summary["epilogue"] = LevelRegistry.EPILOGUES.get(level.ending, [])
+	elif is_chapter_final(level, loader):
 		var next_chapter: int = level.chapter + 1
 		if next_chapter > summary["chapter_now"]:
 			profile.progress["chapter"] = next_chapter

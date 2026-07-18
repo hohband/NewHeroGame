@@ -7,6 +7,8 @@ extends Resource
 @export var name: String = ""
 ## 玩法模式（第九章）：story 主线 / daily 日常副本 / arena 演武场 / expedition 梁山远征
 @export var mode: String = "story"
+## 结局路线 id（终章双路线：zhaoan 招安 / kangzhao 不招安；空 = 非结局关）
+@export var ending: String = ""
 @export var chapter: int = 1
 @export var recommended_level: int = 1
 ## 覆盖通关经验（0 = 按章节公式 30+20×章，日常副本用）

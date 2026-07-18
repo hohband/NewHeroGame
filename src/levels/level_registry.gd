@@ -6,7 +6,22 @@ extends RefCounted
 static func list_ids() -> Array[String]:
 	return ["ch01_01", "ch01_02", "ch01_03", "ch01_04", "ch01_05",
 		"ch02_01", "ch02_02", "ch03_01", "ch04_01", "ch04_02",
-		"ch05_01", "ch05_02", "ch06_01", "ch06_02", "ch06_03", "debug_01"]
+		"ch05_01", "ch05_02", "ch06_01", "ch06_02", "ch06_03",
+		"ch07_01a", "ch07_01b", "debug_01"]
+
+## 结局后日谈（终章双路线，剧情框架：接受招安与拒绝招安双路线提升重复游玩价值）
+const EPILOGUES := {
+	"zhaoan": [
+		"奉诏安民，北征辽寇。梁山一百单八将，自此星散四方。",
+		"若干年后，茶馆里的说书人拍案一声：「各位看官，且听下回分解！」",
+		"—— 结局 · 招安 ——",
+	],
+	"kangzhao": [
+		"圣旨掷地，再举义旗。官军百万，又奈这水泊如何？",
+		"梁山泊里替天行道的大旗，依旧在秋风里猎猎作响。",
+		"—— 结局 · 不招安 ——",
+	],
+}
 
 ## 挑战关 id（高难挑战解锁武将，5.3/挑战关「清风寨」「霹雳火」「东昌府」）
 static func list_challenge_ids() -> Array[String]:
@@ -52,6 +67,10 @@ static func get_level(id: String) -> LevelConfig:
 			return _ch06_02()
 		"ch06_03":
 			return _ch06_03()
+		"ch07_01a":
+			return _ch07_01a()
+		"ch07_01b":
+			return _ch07_01b()
 		"daily_exp_1":
 			return _daily("daily_exp_1", "演武·新兵试炼", 5, 100, {"first_clear": {"gold": 200}, "regular": {"gold": 50}},
 				[{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)}, {"unit": &"xiangjun_spear", "coords": Vector2i(4, 1)},
@@ -758,4 +777,99 @@ static func _ch06_03() -> LevelConfig:
 			{"type": "dialogue", "text": "扈三娘被擒。宋江：「好生看护，不得无礼。」"}]},
 	]
 	l.rewards = {"first_clear": {"gold": 2500, "breakthrough_mat": 5}, "regular": {"gold": 500}}
+	return l
+
+# ---------------------------------------------------------------- 终章：大聚义（招安 / 不招安双路线，剧情框架）
+
+## 招安线：奉诏征辽（为朝廷出战）
+static func _ch07_01a() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "ch07_01a"
+	l.name = "终章·奉诏征辽"
+	l.chapter = 7
+	l.recommended_level = 28
+	l.ending = "zhaoan"
+	l.grid_size = Vector2i(12, 10)
+	for y in range(10):
+		l.terrain_map[Vector2i(5, y)] = &"road"
+		l.terrain_map[Vector2i(6, y)] = &"road"
+	for c in [Vector2i(2, 3), Vector2i(9, 3), Vector2i(3, 6), Vector2i(8, 6)]:
+		l.terrain_map[c] = &"hill"
+	l.height_map = {Vector2i(2, 3): 1, Vector2i(9, 3): 1, Vector2i(3, 6): 1, Vector2i(8, 6): 1}
+	l.win_condition = {"type": "KILL_BOSS"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = []
+	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"hua_rong",
+		&"li_kui", &"qin_ming", &"zhang_qing", &"hu_sanniang", &"xu_ning", &"an_daoquan"]
+	l.deploy_zone = Rect2i(0, 8, 12, 2)
+	l.max_deploy = 8
+	l.enemies = [
+		{"unit": &"yang_zhi_boss", "coords": Vector2i(5, 1), "elite": true, "boss": true, "stat_mult": 1.6},   # 辽将 proxy（占位）
+		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2), "stat_mult": 1.3},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(7, 2), "stat_mult": 1.3},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 3), "stat_mult": 1.3},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(7, 3), "stat_mult": 1.3},
+		{"unit": &"gong_wang", "coords": Vector2i(3, 2), "stat_mult": 1.3},
+		{"unit": &"ding_desun", "coords": Vector2i(8, 2), "stat_mult": 1.3},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "奉旨讨辽！梁山军旗号改成了「顺天」——众兄弟，最后一战。"}]},
+		{"id": "t2", "once": true, "on": {"type": "TURN", "turn": 3}, "actions": [
+			{"type": "dialogue", "text": "辽军骑兵自两翼杀到！"},
+			{"type": "spawn", "units": [
+				{"unit": &"xiangjun_spear", "coords": Vector2i(0, 2), "team": "enemy", "stat_mult": 1.3},
+				{"unit": &"xiangjun_spear", "coords": Vector2i(11, 2), "team": "enemy", "stat_mult": 1.3},
+			]}]},
+	]
+	l.rewards = {"first_clear": {"gold": 3000, "breakthrough_mat": 6}, "regular": {"gold": 600}}
+	return l
+
+## 不招安线：抗诏·官军围剿（朝廷翻脸，四面御敌）
+static func _ch07_01b() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "ch07_01b"
+	l.name = "终章·抗诏再聚义"
+	l.chapter = 7
+	l.recommended_level = 28
+	l.ending = "kangzhao"
+	l.grid_size = Vector2i(12, 10)
+	for x in range(12):
+		l.terrain_map[Vector2i(x, 9)] = &"water"
+	for c in [Vector2i(2, 4), Vector2i(9, 4), Vector2i(4, 6), Vector2i(7, 6)]:
+		l.terrain_map[c] = &"camp"
+	for c in [Vector2i(4, 2), Vector2i(7, 2)]:
+		l.terrain_map[c] = &"barricade"
+	l.win_condition = {"type": "WIPE_OUT"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = []
+	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"hua_rong",
+		&"li_kui", &"qin_ming", &"zhang_qing", &"hu_sanniang", &"xu_ning", &"an_daoquan"]
+	l.deploy_zone = Rect2i(0, 7, 12, 2)
+	l.max_deploy = 8
+	l.enemies = [
+		{"unit": &"qin_ming", "coords": Vector2i(5, 1), "elite": true, "stat_mult": 1.6},   # 官军统制 proxy（占位）
+		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2), "stat_mult": 1.3},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(7, 2), "stat_mult": 1.3},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 3), "stat_mult": 1.3},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(7, 3), "stat_mult": 1.3},
+		{"unit": &"lao_duguan", "coords": Vector2i(6, 0), "elite": true, "stat_mult": 1.4},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "圣旨掷地于尘埃：「梁山贼寇，安敢不臣！」——官军水陆并进，围了山寨。"},
+			{"type": "dialogue", "text": "众头领：「不让咱弟兄快活，就再打他个落花流水！」"}]},
+		{"id": "t2", "once": true, "on": {"type": "TURN", "turn": 2}, "actions": [
+			{"type": "dialogue", "text": "官军后继人马压上！"},
+			{"type": "spawn", "units": [
+				{"unit": &"xiangjun_spear", "coords": Vector2i(2, 0), "team": "enemy", "stat_mult": 1.3},
+				{"unit": &"xiangjun_spear", "coords": Vector2i(9, 0), "team": "enemy", "stat_mult": 1.3},
+			]}]},
+		{"id": "t3", "once": true, "on": {"type": "TURN", "turn": 4}, "actions": [
+			{"type": "dialogue", "text": "水军自芦苇荡杀出，断了官军后路！"},
+			{"type": "spawn", "units": [
+				{"unit": &"zhang_shun", "coords": Vector2i(5, 9), "team": "npc"},
+			]}]},
+	]
+	l.rewards = {"first_clear": {"gold": 3000, "breakthrough_mat": 6}, "regular": {"gold": 600}}
 	return l

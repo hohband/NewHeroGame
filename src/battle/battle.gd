@@ -383,6 +383,8 @@ func _show_result_panel(summary: Dictionary) -> void:
 			lines.append("新武将加入：%s！" % DataLoader.get_unit(id).name)
 		if summary.get("chapter_now", 0) > manager.level.chapter:
 			lines.append("—— 第 %d 章开启 ——" % int(summary["chapter_now"]))
+		for line in summary.get("epilogue", []):
+			lines.append(line)
 		for text in lines:
 			var l := Label.new()
 			l.text = text
