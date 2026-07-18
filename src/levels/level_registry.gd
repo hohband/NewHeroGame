@@ -5,7 +5,8 @@ extends RefCounted
 ## 全部关卡 id（章节顺序，关卡选择界面与章节终关判定用）
 static func list_ids() -> Array[String]:
 	return ["ch01_01", "ch01_02", "ch01_03", "ch01_04", "ch01_05",
-		"ch02_01", "ch02_02", "ch03_01", "ch04_01", "ch04_02", "debug_01"]
+		"ch02_01", "ch02_02", "ch03_01", "ch04_01", "ch04_02",
+		"ch05_01", "ch05_02", "ch06_01", "ch06_02", "ch06_03", "debug_01"]
 
 ## 挑战关 id（高难挑战解锁武将，5.3/挑战关「清风寨」「霹雳火」「东昌府」）
 static func list_challenge_ids() -> Array[String]:
@@ -41,6 +42,16 @@ static func get_level(id: String) -> LevelConfig:
 			return _ch04_02()
 		"challenge_dongchang":
 			return _challenge_dongchang()
+		"ch05_01":
+			return _ch05_01()
+		"ch05_02":
+			return _ch05_02()
+		"ch06_01":
+			return _ch06_01()
+		"ch06_02":
+			return _ch06_02()
+		"ch06_03":
+			return _ch06_03()
 		"daily_exp_1":
 			return _daily("daily_exp_1", "演武·新兵试炼", 5, 100, {"first_clear": {"gold": 200}, "regular": {"gold": 50}},
 				[{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)}, {"unit": &"xiangjun_spear", "coords": Vector2i(4, 1)},
@@ -477,7 +488,7 @@ static func _ch04_02() -> LevelConfig:
 	l.deploy_zone = Rect2i(0, 6, 10, 2)
 	l.max_deploy = 5
 	l.enemies = [
-		{"unit": &"qin_ming", "coords": Vector2i(4, 1), "elite": true, "boss": true},
+		{"unit": &"qin_ming", "coords": Vector2i(4, 1), "elite": true, "boss": true, "stat_mult": 1.5},
 		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)},
 		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 1)},
 		{"unit": &"xiangjun_shield", "coords": Vector2i(3, 2)},
@@ -528,4 +539,223 @@ static func _challenge_dongchang() -> LevelConfig:
 		{"type": "dialogue", "text": "【挑战】龚旺、丁得孙两员副将护翼左右，先剪羽翼再擒主将。"}]}]
 	l.unlock_grant = {"unit": &"zhang_qing"}
 	l.rewards = {"first_clear": {"gold": 1500, "breakthrough_mat": 3}, "regular": {"gold": 350}}
+	return l
+
+# ---------------------------------------------------------------- 第五章：江州劫法场
+
+## 江州·法场（李逵跳楼劫囚，官兵四面合围）
+static func _ch05_01() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "ch05_01"
+	l.name = "江州·劫法场"
+	l.chapter = 5
+	l.recommended_level = 18
+	l.grid_size = Vector2i(10, 8)
+	# 法场：中央开阔广场，四面官兵合围
+	for y in range(2, 6):
+		l.terrain_map[Vector2i(4, y)] = &"road"
+		l.terrain_map[Vector2i(5, y)] = &"road"
+	for c in [Vector2i(1, 1), Vector2i(8, 1), Vector2i(1, 6), Vector2i(8, 6)]:
+		l.terrain_map[c] = &"barricade"
+	l.win_condition = {"type": "WIPE_OUT"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = [&"li_kui"]
+	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"bai_sheng",
+		&"dai_zong", &"xu_ning", &"hua_rong", &"qin_ming", &"an_daoquan", &"jiao_ting", &"bao_xu"]
+	l.deploy_zone = Rect2i(0, 6, 10, 2)
+	l.max_deploy = 6
+	l.enemies = [
+		{"unit": &"lao_duguan", "coords": Vector2i(4, 0), "elite": true, "stat_mult": 1.5},   # 蔡九 proxy（占位）
+		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 0)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 0)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(3, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(6, 2)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 3)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(6, 3)},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "午时三刻，法场四周刀枪如林。黑旋风从半空里跳将下来！"},
+			{"type": "dialogue", "text": "李逵：「都闪开！砍翻他们一个不留！」"}]},
+		{"id": "t2", "once": true, "on": {"type": "TURN", "turn": 2}, "actions": [
+			{"type": "dialogue", "text": "城外官兵增援杀到！"},
+			{"type": "spawn", "units": [
+				{"unit": &"xiangjun_spear", "coords": Vector2i(0, 1), "team": "enemy"},
+				{"unit": &"xiangjun_spear", "coords": Vector2i(9, 1), "team": "enemy"},
+			]}]},
+	]
+	l.rewards = {"first_clear": {"gold": 1500, "breakthrough_mat": 3}, "regular": {"gold": 350}}
+	return l
+
+## 白龙庙·江边断后（张顺水战，坚守待船）
+static func _ch05_02() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "ch05_02"
+	l.name = "白龙庙·江边断后"
+	l.chapter = 5
+	l.recommended_level = 20
+	l.grid_size = Vector2i(10, 8)
+	# 江边：南侧水面，张顺水中来去
+	for x in range(10):
+		l.terrain_map[Vector2i(x, 7)] = &"water"
+	for c in [Vector2i(2, 3), Vector2i(7, 3), Vector2i(3, 5), Vector2i(6, 5)]:
+		l.terrain_map[c] = &"forest"
+	for c in [Vector2i(4, 4), Vector2i(5, 4)]:
+		l.terrain_map[c] = &"camp"
+	l.win_condition = {"type": "SURVIVE_TURNS", "turns": 6}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = []
+	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"bai_sheng",
+		&"li_kui", &"dai_zong", &"xu_ning", &"hua_rong", &"qin_ming", &"an_daoquan", &"zhang_shun"]
+	l.deploy_zone = Rect2i(0, 5, 10, 2)
+	l.max_deploy = 6
+	l.npc_allies = [{"unit": &"zhang_shun", "coords": Vector2i(4, 7)}]   # 水中接应（水战特性展示）
+	l.enemies = [
+		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 0)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 0)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 0)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(6, 0)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 1)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(5, 1)},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "【教学】坚守 6 回合，船到即走。张顺在水中接应——他不受水面迟滞。"}]},
+		{"id": "t2", "once": true, "on": {"type": "TURN", "turn": 2}, "actions": [
+			{"type": "dialogue", "text": "官军第二波涌上江岸！"},
+			{"type": "spawn", "units": [
+				{"unit": &"xiangjun_spear", "coords": Vector2i(2, 0), "team": "enemy"},
+				{"unit": &"xiangjun_spear", "coords": Vector2i(7, 0), "team": "enemy"},
+			]}]},
+		{"id": "t3", "once": true, "on": {"type": "TURN", "turn": 4}, "actions": [
+			{"type": "dialogue", "text": "官军弓手压上来了，再撑两回合！"},
+			{"type": "spawn", "units": [
+				{"unit": &"gong_wang", "coords": Vector2i(4, 0), "team": "enemy"},
+				{"unit": &"ding_desun", "coords": Vector2i(5, 0), "team": "enemy"},
+			]}]},
+	]
+	l.rewards = {"first_clear": {"gold": 1800, "breakthrough_mat": 3}, "regular": {"gold": 400}}
+	return l
+
+# ---------------------------------------------------------------- 第六章：三打祝家庄
+
+## 一打·前哨探庄
+static func _ch06_01() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "ch06_01"
+	l.name = "一打·祝家庄前哨"
+	l.chapter = 6
+	l.recommended_level = 22
+	l.grid_size = Vector2i(10, 8)
+	for y in range(8):
+		l.terrain_map[Vector2i(4, y)] = &"road"
+	for c in [Vector2i(2, 2), Vector2i(3, 2), Vector2i(6, 2), Vector2i(7, 2), Vector2i(2, 5), Vector2i(7, 5)]:
+		l.terrain_map[c] = &"forest"
+	l.win_condition = {"type": "WIPE_OUT"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = []
+	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"bai_sheng",
+		&"li_kui", &"xu_ning", &"hua_rong", &"qin_ming", &"wang_ying", &"an_daoquan", &"zhang_qing"]
+	l.deploy_zone = Rect2i(0, 6, 10, 2)
+	l.max_deploy = 6
+	l.enemies = [
+		{"unit": &"xiangjun_spear", "coords": Vector2i(3, 1)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(5, 1)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 1)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 2)},
+		{"unit": &"gong_wang", "coords": Vector2i(4, 0)},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "祝家庄外，吊桥高悬。庄丁平日横惯了，见人就杀。"}]},
+		{"id": "t2", "once": true, "on": {"type": "ENTER_ZONE", "zone": Rect2i(0, 2, 10, 2), "who": "player"}, "actions": [
+			{"type": "dialogue", "text": "两侧松林里冲出庄丁伏兵！"},
+			{"type": "spawn", "units": [
+				{"unit": &"xiangjun_spear", "coords": Vector2i(2, 2), "team": "enemy"},
+				{"unit": &"xiangjun_spear", "coords": Vector2i(7, 2), "team": "enemy"},
+			]}]},
+	]
+	l.rewards = {"first_clear": {"gold": 1800, "breakthrough_mat": 3}, "regular": {"gold": 400}}
+	return l
+
+## 二打·盘陀路（路径曲折，拒马拦路）
+static func _ch06_02() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "ch06_02"
+	l.name = "二打·盘陀路"
+	l.chapter = 6
+	l.recommended_level = 24
+	l.grid_size = Vector2i(12, 10)
+	for c in [Vector2i(3, 2), Vector2i(5, 3), Vector2i(7, 4), Vector2i(5, 5), Vector2i(3, 6), Vector2i(8, 2)]:
+		l.terrain_map[c] = &"barricade"
+	for c in [Vector2i(1, 3), Vector2i(2, 3), Vector2i(9, 5), Vector2i(10, 5), Vector2i(5, 7), Vector2i(6, 7)]:
+		l.terrain_map[c] = &"forest"
+	for c in [Vector2i(10, 1), Vector2i(11, 1)]:
+		l.terrain_map[c] = &"hill"
+	l.height_map = {Vector2i(10, 1): 1, Vector2i(11, 1): 1}
+	l.win_condition = {"type": "WIPE_OUT"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = []
+	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"bai_sheng",
+		&"li_kui", &"xu_ning", &"hua_rong", &"qin_ming", &"wang_ying", &"an_daoquan", &"zhang_qing"]
+	l.deploy_zone = Rect2i(0, 8, 12, 2)
+	l.max_deploy = 6
+	l.enemies = [
+		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(6, 3)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(5, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(7, 3)},
+		{"unit": &"ding_desun", "coords": Vector2i(10, 1)},
+		{"unit": &"gong_wang", "coords": Vector2i(11, 1)},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "盘陀路弯弯曲曲，到处都是拒马。白杨树才是转弯的记号……"},
+			{"type": "dialogue", "text": "【教学】拒马挡路，绕行或打碎（约 3 次攻击）。山上飞叉冷箭，小心。"}]},
+		{"id": "t2", "once": true, "on": {"type": "TURN", "turn": 3}, "actions": [
+			{"type": "dialogue", "text": "后路又有庄丁包抄！"},
+			{"type": "spawn", "units": [{"unit": &"xiangjun_spear", "coords": Vector2i(11, 8), "team": "enemy"}]}]},
+	]
+	l.rewards = {"first_clear": {"gold": 2000, "breakthrough_mat": 4}, "regular": {"gold": 450}}
+	return l
+
+## 三打·庄门决战（扈三娘出战，通关后入队）
+static func _ch06_03() -> LevelConfig:
+	var l := LevelConfig.new()
+	l.id = "ch06_03"
+	l.name = "三打·祝家庄"
+	l.chapter = 6
+	l.recommended_level = 26
+	l.grid_size = Vector2i(12, 10)
+	for y in range(10):
+		l.terrain_map[Vector2i(5, y)] = &"road"
+		l.terrain_map[Vector2i(6, y)] = &"road"
+	for c in [Vector2i(2, 4), Vector2i(9, 4), Vector2i(3, 7), Vector2i(8, 7)]:
+		l.terrain_map[c] = &"camp"
+	for c in [Vector2i(4, 1), Vector2i(7, 1)]:
+		l.terrain_map[c] = &"barricade"
+	l.win_condition = {"type": "KILL_BOSS"}
+	l.lose_conditions = [{"type": "WIPED_OUT"}]
+	l.required_units = []
+	l.roster = [&"lin_chong", &"lu_zhishen", &"wu_song", &"gongsun_sheng", &"wu_yong", &"bai_sheng",
+		&"li_kui", &"xu_ning", &"hua_rong", &"qin_ming", &"wang_ying", &"an_daoquan", &"zhang_qing"]
+	l.deploy_zone = Rect2i(0, 8, 12, 2)
+	l.max_deploy = 6
+	l.npc_allies = [{"unit": &"wang_ying", "coords": Vector2i(6, 8)}]
+	l.enemies = [
+		{"unit": &"lao_duguan", "coords": Vector2i(5, 0), "elite": true, "boss": true, "stat_mult": 2.0},   # 祝朝奉 proxy（占位）
+		{"unit": &"hu_sanniang", "coords": Vector2i(6, 2), "elite": true, "stat_mult": 1.3},   # 一丈青出战（战后入队）
+		{"unit": &"xiangjun_spear", "coords": Vector2i(4, 2)},
+		{"unit": &"xiangjun_spear", "coords": Vector2i(7, 2)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(4, 3)},
+		{"unit": &"xiangjun_shield", "coords": Vector2i(7, 3)},
+	]
+	l.triggers = [
+		{"id": "t1", "once": true, "on": {"type": "START"}, "actions": [
+			{"type": "dialogue", "text": "祝朝奉门前，一丈青扈三娘纵马提刀杀出——好一个女将！"},
+			{"type": "dialogue", "text": "王英：「这娘子交给我……哎哟！」（小心她的红棉套索）"}]},
+		{"id": "t2", "once": true, "on": {"type": "UNIT_DEAD", "unit": "hu_sanniang"}, "actions": [
+			{"type": "dialogue", "text": "扈三娘被擒。宋江：「好生看护，不得无礼。」"}]},
+	]
+	l.rewards = {"first_clear": {"gold": 2500, "breakthrough_mat": 5}, "regular": {"gold": 500}}
 	return l

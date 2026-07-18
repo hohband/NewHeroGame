@@ -77,16 +77,17 @@ static func is_chapter_final(level: LevelConfig, loader: GameDataLoader) -> bool
 			return false
 	return true
 
-## 章节通关后的武将解锁（决策日志 D32）：
-## 「第N章通关解锁」在通关第 N 章时发放；「第N章剧情加入」在抵达第 N 章（通关第 N-1 章）时发放。
+## 章节通关后的武将解锁（决策日志 D32/D37 注）：
+## 「第N章…通关…」（如 第4章通关解锁 / 第6章「三打祝家庄」通关）在通关第 N 章终关时发放；
+## 「第N章剧情加入」在抵达第 N 章（通关第 N-1 章终关）时发放。挑战关渠道另走 unlock_grant。
 static func grant_chapter_heroes(profile: PlayerProfile, cleared_chapter: int, loader: GameDataLoader) -> Array:
 	var unlocked: Array = []
 	for id in loader.units:
 		var ud: UnitData = loader.units[id]
 		if profile.has_hero(id):
 			continue
-		if ud.unlock.contains("第%d章通关解锁" % cleared_chapter) \
-				or ud.unlock.contains("第%d章剧情加入" % (cleared_chapter + 1)):
+		var chapter_clear := ud.unlock.contains("第%d章" % cleared_chapter) and ud.unlock.contains("通关")
+		if chapter_clear or ud.unlock.contains("第%d章剧情加入" % (cleared_chapter + 1)):
 			profile.add_hero(Hero.new(id, ud.quality))
 			unlocked.append(id)
 	return unlocked
