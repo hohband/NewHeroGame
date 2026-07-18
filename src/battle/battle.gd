@@ -267,10 +267,13 @@ func _joy_cursor(event: InputEvent) -> bool:
 
 func _roster_index_at(pos: Vector2) -> int:
 	for i in roster_ids.size():
-		var center := Vector2(-360.0, 24.0 + i * 44.0)
-		if pos.distance_to(center) <= 18.0:
+		if pos.distance_to(_roster_center(i)) <= 18.0:
 			return i
 	return -1
+
+## 候选条位置：棋盘左侧留白居中（随 ORIGIN 自适应，试玩反馈：写死 -360 会画出屏幕外）
+func _roster_center(i: int) -> Vector2:
+	return Vector2(160.0 - ORIGIN.x, 24.0 + i * 44.0)
 
 func _pos_to_cell(pos: Vector2) -> Vector2i:
 	return Vector2i(floori(pos.x / CELL), floori(pos.y / CELL))
@@ -683,7 +686,7 @@ func _draw_deploy() -> void:
 	var font := ThemeDB.fallback_font
 	for i in roster_ids.size():
 		var id: StringName = roster_ids[i]
-		var center := Vector2(-360.0, 24.0 + i * 44.0)
+		var center := _roster_center(i)
 		var ud := DataLoader.get_unit(id)
 		var p := _portrait_texture(id)
 		if p != null:
